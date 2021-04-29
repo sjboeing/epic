@@ -20,6 +20,8 @@ module parcel_diverge
     use parameters, only : vcell, nx, nz, dx, dxi
 
     use parcel_container
+    use ellipse
+    use options, only : parcel_info
 
     implicit none
 
@@ -144,7 +146,8 @@ module parcel_diverge
         double precision             :: phi(0:nz,0:nx-1), ud(-1:nz+1,0:nx-1), wd(-1:nz+1,0:nx-1)
         double precision             :: wbar(0:nz)
         double precision             :: weights(ngp)
-        integer                      :: n, l, is(ngp), js(ngp)
+        double precision             :: points(2, 2)
+        integer                      :: n, l, is(ngp), js(ngp), p
 
         ! form divergence field * dt and store in phi temporarily:
         phi = volg(0:nz, :, 1) / vcell - one
@@ -182,19 +185,53 @@ module parcel_diverge
 
         !------------------------------------------------------------------
         ! Increment parcel positions usind (ud,wd) field:
-        do n = 1, n_parcels
-            call trilinear(parcels%position(n, :), is, js, weights)
+        if (parcel_info%is_elliptic) then
 
-            do l = 1, ngp
-                parcels%position(n, 1) = parcels%position(n, 1)             &
-                                       + weights(l) * ud(js(l), is(l))
+            do n = 1, n_parcels
 
-                parcels%position(n, 2) = parcels%position(n, 2)             &
-                                       + weights(l) * wd(js(l), is(l))
+                points = get_ellipse_points(parcels%position(n, :), parcels%volume(n, 1), parcels%B(n, :))
+
+                ! we have 2 points per ellipse
+                do p = 1, 2
+
+                    ! ensure point is within the domain
+                    call apply_periodic_bc(points(p, :))
+
+                    ! get interpolation weights and mesh indices
+                    call trilinear(points(p, :), is, js, weights)
+
+                    do l = 1, ngp
+                        ! the weight is halved due to 2 points per ellipse
+                        parcels%position(n, 1) = parcels%position(n, 1)             &
+                                               + 0.5*weights(l) * ud(js(l), is(l))
+
+                        parcels%position(n, 2) = parcels%position(n, 2)             &
+                                               + 0.5*weights(l) * wd(js(l), is(l))
+                   enddo
+
+                enddo
+                call apply_periodic_bc(parcels%position(n, :))
+
+            end do
+        else
+            do n = 1, n_parcels
+
+                call apply_periodic_bc(parcels%position(n, :))
+
+                call trilinear(parcels%position(n, :), is, js, weights)
+
+                do l = 1, ngp
+                    parcels%position(n, 1) = parcels%position(n, 1)             &
+                                           + weights(l) * ud(js(l), is(l))
+
+                    parcels%position(n, 2) = parcels%position(n, 2)             &
+                                           + weights(l) * wd(js(l), is(l))
+                enddo
+
+                call apply_periodic_bc(parcels%position(n, :))
             enddo
+        end if
 
-            call apply_periodic_bc(parcels%position(n, :))
-        enddo
     end subroutine apply_diverge
 
     subroutine apply_gradient(volg,gradient_pref)
@@ -203,27 +240,57 @@ module parcel_diverge
         double precision             :: phi(0:nz,0:nx-1)
         double precision             :: weights(ngp)
         double precision             :: points(2, 2)
-        integer                      :: n, i, p, is(ngp), js(ngp)
+        integer                      :: n, p, is(ngp), js(ngp)
 
         ! form divergence field * dt and store in phi temporarily:
         phi = (volg(0:nz, :, 1) - vcell)/(vcell)
 
-        do n = 1, n_parcels
+        if (parcel_info%is_elliptic) then
 
-            call apply_periodic_bc(parcels%position(n, :))
+            do n = 1, n_parcels
 
-            call trilinear(parcels%position(n, :), is, js, weights)
+                points = get_ellipse_points(parcels%position(n, :), parcels%volume(n, 1), parcels%B(n, :))
 
-            parcels%position(n, 1) = parcels%position(n, 1)    &
-            - gradient_pref*dx(1)*(weights(2)+weights(1))*(phi(js(2), is(2))-phi(js(1), is(1)))  &
-            - gradient_pref*dx(1)*(weights(4)+weights(3))*(phi(js(4), is(4))-phi(js(3), is(3)))
+                ! we have 2 points per ellipse
+                do p = 1, 2
 
-            parcels%position(n, 2) = parcels%position(n, 2)             &
-            - gradient_pref*dx(2)*(weights(3)+weights(1))*(phi(js(3), is(3))-phi(js(1), is(1))) &
-            - gradient_pref*dx(2)*(weights(4)+weights(2))*(phi(js(4), is(4))-phi(js(2), is(2)))
+                    ! ensure point is within the domain
+                    call apply_periodic_bc(points(p, :))
 
-            call apply_periodic_bc(parcels%position(n, :))
-        enddo
+                    call trilinear(points(p, :), is, js, weights)
+
+                    ! the weight is halved due to 2 points per ellipse
+                    parcels%position(n, 1) = parcels%position(n, 1)    &
+                    - 0.5*gradient_pref*dx(1)*(weights(2)+weights(1))*(phi(js(2), is(2))-phi(js(1), is(1)))  &
+                    - 0.5*gradient_pref*dx(1)*(weights(4)+weights(3))*(phi(js(4), is(4))-phi(js(3), is(3)))
+
+                    parcels%position(n, 2) = parcels%position(n, 2)             &
+                    - 0.5*gradient_pref*dx(2)*(weights(3)+weights(1))*(phi(js(3), is(3))-phi(js(1), is(1))) &
+                    - 0.5*gradient_pref*dx(2)*(weights(4)+weights(2))*(phi(js(4), is(4))-phi(js(2), is(2)))
+
+                enddo
+                call apply_periodic_bc(parcels%position(n, :))
+
+            end do
+        else
+            do n = 1, n_parcels
+
+                call apply_periodic_bc(parcels%position(n, :))
+
+                call trilinear(parcels%position(n, :), is, js, weights)
+
+                parcels%position(n, 1) = parcels%position(n, 1)    &
+                - gradient_pref*dx(1)*(weights(2)+weights(1))*(phi(js(2), is(2))-phi(js(1), is(1)))  &
+                - gradient_pref*dx(1)*(weights(4)+weights(3))*(phi(js(4), is(4))-phi(js(3), is(3)))
+
+                parcels%position(n, 2) = parcels%position(n, 2)             &
+                - gradient_pref*dx(2)*(weights(3)+weights(1))*(phi(js(3), is(3))-phi(js(1), is(1))) &
+                - gradient_pref*dx(2)*(weights(4)+weights(2))*(phi(js(4), is(4))-phi(js(2), is(2)))
+
+                call apply_periodic_bc(parcels%position(n, :))
+            enddo
+        end if
+
 
     end subroutine apply_gradient
     !::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
