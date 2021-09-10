@@ -4,7 +4,7 @@
 module parcel_diagnostics
     use constants, only : zero, one, f12
     use merge_sort
-    use parameters, only : extent, lower, vcell, vmin
+    use parameters, only : extent, lower, vcell
     use parcel_container, only : parcels, n_parcels
     use parcel_ellipse
     use h5_utils
@@ -157,7 +157,7 @@ module parcel_diagnostics
                 vsum = vsum + vol
                 v2sum = v2sum + vol ** 2
 
-                if (vol <= vmin) then
+                if (vol <= parcels%vmin(n)) then
                     n_small = n_small + 1
                 endif
 

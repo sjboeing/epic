@@ -27,6 +27,7 @@ program epic
 #ifndef NDEBUG
     use parcel_interpl, only : sym_vol2grid_timer
 #endif
+    use parcel_vmin, only : vmin_timer
     use parcel_init, only : init_parcels, init_timer
     use ls_rk4, only : ls_rk4_alloc, ls_rk4_dealloc, ls_rk4_step, rk4_timer
     use h5_utils, only : initialise_hdf5, finalise_hdf5
@@ -72,6 +73,7 @@ program epic
             call register_timer('parcel push', rk4_timer)
             call register_timer('merge nearest', merge_nearest_timer)
             call register_timer('merge tree resolve', merge_tree_resolve_timer)
+            call register_timer('parcel vmin', vmin_timer)
 #ifndef NDEBUG
             call register_timer('symmetric vol2grid', sym_vol2grid_timer)
 #endif

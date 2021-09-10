@@ -5,7 +5,7 @@
 module parcel_interpl
     use constants, only : zero, one, two
     use timer, only : start_timer, stop_timer
-    use parameters, only : nx, nz, vmin
+    use parameters, only : nx, nz
     use options, only : parcel
     use parcel_container, only : parcels, n_parcels
     use parcel_bc, only : apply_periodic_bc
@@ -185,7 +185,7 @@ module parcel_interpl
                 call get_index(parcels%position(n, :), i, j)
                 i = mod(i + nx, nx)
                 nparg(j, i) = nparg(j, i) + 1
-                if (parcels%volume(n) <= vmin) then
+                if (parcels%volume(n) <= parcels%vmin(n)) then
                     nsparg(j, i) = nsparg(j, i) + 1
                 endif
 

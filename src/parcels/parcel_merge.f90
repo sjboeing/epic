@@ -11,6 +11,7 @@ module parcel_merge
                                , parcel_replace         &
                                , get_delx
     use parcel_ellipse, only : get_B22, get_ab
+    use parcel_vmin
     use options, only : parcel, verbose
     use parcel_bc
     use timer, only : start_timer, stop_timer
@@ -38,6 +39,8 @@ module parcel_merge
             integer, allocatable, dimension(:)         :: isma
             integer, allocatable, dimension(:)         :: iclo
             integer                                    :: n_merge ! number of merges
+
+            call get_parcel_vmin(parcels)
 
             ! find parcels to merge
             call find_nearest(isma, iclo, n_merge)

@@ -112,6 +112,10 @@ module parcel_hdf5
 
             call write_h5_dataset_1d(h5file_id, name, "buoyancy", &
                                      parcels%buoyancy(1:n_parcels))
+
+            call write_h5_dataset_1d(h5file_id, name, "vmin", &
+                                     parcels%vmin(1:n_parcels))
+
 #ifndef ENABLE_DRY_MODE
             call write_h5_dataset_1d(h5file_id, name, "humidity", &
                                      parcels%humidity(1:n_parcels))

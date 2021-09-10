@@ -21,14 +21,15 @@ epic_SOURCES = 					\
 	parcels/parcel_bc.f90			\
 	parcels/parcel_nearest.f90		\
 	parcels/merge_hdf5.f90			\
+	parcels/parcel_interpl.f90 		\
+	tri_inversion.f90			\
+	parcels/parcel_vmin.f90	         	\
 	parcels/parcel_merge.f90		\
 	parcels/parcel_split.f90		\
 	parcels/parcel_diagnostics.f90		\
-	parcels/parcel_interpl.f90 		\
 	parcels/parcel_init.f90			\
 	parcels/parcel_correction.f90		\
 	parcels/parcel_hdf5.f90			\
-	tri_inversion.f90			\
 	utils/utils.f90				\
 	stepper/rk4_utils.f90			\
 	stepper/ls_rk4.f90			\

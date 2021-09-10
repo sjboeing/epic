@@ -20,7 +20,9 @@ module parcel_container
 #ifndef ENABLE_DRY_MODE
             humidity,   &
 #endif
-            buoyancy
+            buoyancy,   &
+            vmin
+
     end type parcel_container_type
 
     type(parcel_container_type) parcels
@@ -66,6 +68,7 @@ module parcel_container
 #ifndef ENABLE_DRY_MODE
             parcels%humidity(n) = parcels%humidity(m)
 #endif
+            parcels%vmin(n) = parcels%vmin(m)
             parcels%B(n, 1) = parcels%B(m, 1)
             parcels%B(n, 2) = parcels%B(m, 2)
 
@@ -84,6 +87,7 @@ module parcel_container
 #ifndef ENABLE_DRY_MODE
             allocate(parcels%humidity(num))
 #endif
+            allocate(parcels%vmin(num))
         end subroutine parcel_alloc
 
         ! Deallocate parcel memory
@@ -96,6 +100,7 @@ module parcel_container
 #ifndef ENABLE_DRY_MODE
             deallocate(parcels%humidity)
 #endif
+            deallocate(parcels%vmin)
         end subroutine parcel_dealloc
 
 end module parcel_container

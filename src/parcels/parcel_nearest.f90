@@ -4,7 +4,7 @@
 module parcel_nearest
     use constants, only : pi, f12, max_num_parcels
     use parcel_container, only : parcels, n_parcels, get_delx
-    use parameters, only : dx, dxi, vcell, hli, lower, extent, ncell, nx, nz, vmin
+    use parameters, only : dx, dxi, vcell, hli, lower, extent, ncell, nx, nz
     use options, only : parcel
     use timer, only : start_timer, stop_timer
 
@@ -86,7 +86,7 @@ module parcel_nearest
                 ! Store grid cell that this parcel is in:
                 loca(n) = ij
 
-                if (parcels%volume(n) < vmin) then
+                if (parcels%volume(n) < parcels%vmin(n)) then
                     nmerge = nmerge + 1
                 endif
             enddo
@@ -117,7 +117,7 @@ module parcel_nearest
                 node(k) = n
                 kc2(ij) = k
 
-                if (parcels%volume(n) < vmin) then
+                if (parcels%volume(n) < parcels%vmin(n)) then
                     j = j + 1
                     isma(j) = n
                 endif
@@ -335,7 +335,7 @@ module parcel_nearest
 
             ! 2. CHECK MERGING PARCELS
             do n = 1, n_parcels
-              if (parcels%volume(n) < vmin) then
+              if (parcels%volume(n) < parcels%vmin(n)) then
                 if(.not. l_merged(n)) write(*,*) 'merge_error: parcel n not merged (should be), n=', n
                 if(.not. (l_small(n) .or. l_close(n))) write(*,*) 'merge_error: parcel n not small or close (should be), n=', n
                 if(l_small(n) .and. l_close(n)) write(*,*) 'merge_error: parcel n both small and close, n=', n

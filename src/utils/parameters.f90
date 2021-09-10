@@ -42,11 +42,17 @@ module parameters
     ! domain upper boundary
     double precision :: upper(2)
 
-    ! minimum volume
-    double precision :: vmin
+    ! cutoff volume ratio
+    double precision :: vcutoff
+
+    ! factor uses in calculating dt
+    double precision :: vmin_dt_factor
 
     ! maximum volume
     double precision :: vmax
+
+    ! maximum merge ratio
+    double precision :: vkeep
 
     contains
 
@@ -83,8 +89,12 @@ module parameters
         hl = extent / two
         hli = one / hl
 
-        vmin = vcell / parcel%min_vratio
         vmax = vcell / parcel%max_vratio
+
+        vkeep = f12*vmax
+
+        vcutoff = vcell / parcel%cutoff_vratio
+
 
     end subroutine update_parameters
 end module parameters
