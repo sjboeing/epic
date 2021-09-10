@@ -99,7 +99,7 @@ module parcel_merge
             integer                                    :: loca(n_parcels)
             double precision                           :: x0(n_merge), xm(n_merge)
             double precision                           :: zm(n_merge), delx, vmerge, dely, B22, mu
-            double precision                           :: buoym(n_merge), vortm(n_merge)
+            double precision                           :: buoym(n_merge), vortm(n_merge), vminm(n_merge)
 #ifndef ENABLE_DRY_MODE
             double precision                           :: hum(n_merge)
 #endif
@@ -129,8 +129,10 @@ module parcel_merge
                     ! zm will contain v(ic)*z(ic)+sum{v(is)*z(is)}
                     zm(l) = parcels%volume(ic) * parcels%position(ic, 2)
 
-                    ! buoyancy and humidity
+                    ! buoyancy, vmin and humidity
                     buoym(l) = parcels%volume(ic) * parcels%buoyancy(ic)
+                    vminm(l) = parcels%volume(ic) * parcels%vmin(ic)
+
 #ifndef ENABLE_DRY_MODE
                     hum(l) = parcels%volume(ic) * parcels%humidity(ic)
 #endif
@@ -156,8 +158,10 @@ module parcel_merge
                 ! Accumulate v(ic)*z(ic)+sum{v(is)*z(is)}
                 zm(n) = zm(n) + parcels%volume(is) * parcels%position(is, 2)
 
-                ! Accumulate buoyancy and humidity
+                ! Accumulate buoyancy, vmin and humidity
                 buoym(n) = buoym(n) + parcels%volume(is) * parcels%buoyancy(is)
+                vminm(n) = vminm(n) + parcels%volume(is) * parcels%vmin(is)
+
 #ifndef ENABLE_DRY_MODE
                 hum(n) = hum(n) + parcels%volume(is) * parcels%humidity(is)
 #endif
@@ -176,8 +180,10 @@ module parcel_merge
                 ! z centre of merged parcel
                 zm(m) = vmerge * zm(m)
 
-                ! buoyancy and humidity
+                ! buoyancy, vmin and humidity
                 buoym(m) = vmerge * buoym(m)
+                vminm(m) = vmerge * vminm(m)
+
 #ifndef ENABLE_DRY_MODE
                 hum(m) = vmerge * hum(m)
 #endif
@@ -211,6 +217,8 @@ module parcel_merge
                     parcels%position(ic, 2) = zm(l)
 
                     parcels%buoyancy(ic) = buoym(l)
+                    parcels%vmin(ic) = vminm(l)
+
 #ifndef ENABLE_DRY_MODE
                     parcels%humidity(ic) = hum(l)
 #endif

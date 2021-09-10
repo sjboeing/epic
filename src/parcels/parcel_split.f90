@@ -81,6 +81,7 @@ module parcel_split
                 parcels%vorticity(n_thread_loc) = parcels%vorticity(n)
                 parcels%volume(n_thread_loc) = parcels%volume(n)
                 parcels%buoyancy(n_thread_loc) = parcels%buoyancy(n)
+                parcels%vmin(n_thread_loc) = parcels%vmin(n)
 #ifndef ENABLE_DRY_MODE
                 parcels%humidity(n_thread_loc) = parcels%humidity(n)
 #endif
