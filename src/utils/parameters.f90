@@ -45,8 +45,8 @@ module parameters
     ! cutoff volume ratio
     double precision :: vcutoff
 
-    ! factor uses in calculating dt
-    double precision :: vmin_dt_factor
+    ! factor uses in calculating nu
+    double precision :: vmin_nu_factor
 
     ! maximum volume
     double precision :: vmax
@@ -95,6 +95,7 @@ module parameters
 
         vcutoff = vcell / parcel%cutoff_vratio
 
+        vmin_nu_factor =parcel%vmin_nu_factor
 
     end subroutine update_parameters
 end module parameters

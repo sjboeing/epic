@@ -7,7 +7,7 @@ module parcel_vmin
     use fields, only : velgradg, velog, vortg, vtend, tbuoyg
     use tri_inversion, only : vor2vel, vorticity_tendency, xtrig, xfactors, hrkx
     use constants, only : zero, f12, f32, f23
-    use parameters, only : nx, nz, dxi, vkeep, vcutoff, vmin_dt_factor
+    use parameters, only : nx, nz, dxi, vkeep, vcutoff, vmin_nu_factor
     use parcel_interpl, only : trilinear, ngp
     use parcel_container
     use stafft
@@ -31,8 +31,6 @@ module parcel_vmin
         ! @param[inout] parcels is the parcel container
         subroutine get_parcel_vmin(parcels)
             type(parcel_container_type), intent(inout) :: parcels
-            double precision             :: dt, vortgradmax,vortgradmag
-            double precision             :: vortgradmagg(-1:nz+1, 0:nx-1)
 
             call par2grid
 
@@ -44,31 +42,7 @@ module parcel_vmin
 
             call start_timer(vmin_timer)
 
-            ! calculate the magnitude of the vorticity gradient
-            call get_vortgradmag(vortg,vortgradmagg,vortgradmax)
-
-            ! update the time step
-            call get_parcel_time_step(parcels,dt)
-
-            !$omp parallel default(shared)
-            !$omp do private(n,is,js,weights,vortgradmag)
-            do n = 1, n_parcels
-              parcels%vmin(n)=vcutoff*(parcels%vmin(n)/(parcel%vmin_dt_factor*dt))
-              call trilinear(parcels%position(n, :), is, js, weights)
-              vortgradmag=zero
-              do l = 1, ngp
-                vortgradmag=vortgradmag+weights(l)*vortgradmagg(js(l), is(l))
-              enddo
-              parcels%vmin(n)=min(parcels%vmin(n),&
-              ((vcutoff**f32)*vortgradmax/(parcel%vmin_dt_factor*vortgradmag))**f23)
-              if(parcels%vmin(n)<vcutoff) then
-                parcels%vmin(n)=vcutoff
-              elseif(parcels%vmin(n)>vkeep) then
-                parcels%vmin(n)=vkeep
-              end if
-            end do
-            !$omp end do
-            !$omp end parallel
+            call get_parcel_vmin_part_2(parcels)
 
             call stop_timer(vmin_timer)
 
@@ -77,51 +51,15 @@ module parcel_vmin
         ! Estimate a suitable time step based on the velocity strain
         ! and buoyancy gradient.
         ! @returns the parcel time step
-        subroutine get_parcel_time_step(parcels,dt)
+        subroutine get_parcel_vmin_part_2(parcels)
             type(parcel_container_type), intent(inout) :: parcels
-            double precision,intent(out) :: dt
-            double precision             :: gmax, bmax
+            double precision             :: gmax, bmax, vortgradmax, vmintemp
+            double precision             :: glocal, blocal, vortgradlocal
             double precision             :: gfield(0:nz, 0:nx-1),dbdz(0:nz, 0:nx-1),bfield(0:nz, 0:nx-1)
+            double precision             :: vortgradmagg(-1:nz+1, 0:nx-1)
+            double precision             :: dvortdz(-1:nz+1, 0:nx-1)
+            double precision             :: psig(0:nz, 0:nx-1)
             integer                      :: kx,iz
-
-            gfield = f12 * dsqrt(((velgradg(0:nz, :, 1) - velgradg(0:nz, :, 4)) ** 2 + &
-                                        (velgradg(0:nz, :, 2) + velgradg(0:nz, :, 3)) ** 2))
-
-            dbdz(0:nz, :) = f12 * dxi(2) * (tbuoyg(1:nz+1, :) - tbuoyg(-1:nz-1, :))
-
-            bfield = dsqrt(dsqrt(vtend(0:nz, :) ** 2 + dbdz ** 2))
-
-            do kx=0,nx-1
-              do iz=0,nz
-                gfield(iz,kx)=max(epsilon(gfield(iz,kx)),gfield(iz,kx))
-                bfield(iz,kx)=max(epsilon(bfield(iz,kx)),bfield(iz,kx))
-              enddo
-            enddo
-
-            parcels%vmin(1:n_parcels)=zero
-
-            !$omp parallel default(shared)
-            !$omp do private(n, l, is, js, weights)
-            do n = 1, n_parcels
-              call trilinear(parcels%position(n, :), is, js, weights)
-              do l = 1, ngp
-                parcels%vmin(n) = parcels%vmin(n) + weights(l)*&
-                min(time%alpha / gfield(js(l), is(l)), time%alpha / bfield(js(l), is(l)))
-              enddo
-            enddo
-            !$omp end do
-            !$omp end parallel
-
-            dt = min(time%alpha / maxval(gfield), time%alpha / maxval(bfield))
-
-        end subroutine get_parcel_time_step
-
-        subroutine get_vortgradmag(vortg, vortgradmagg,vortgradmax)
-            double precision, intent(in)  :: vortg(-1:nz+1, 0:nx-1)
-            double precision, intent(out) :: vortgradmagg(-1:nz+1, 0:nx-1)
-            double precision, intent(out) :: vortgradmax
-            double precision              :: dvortdz(-1:nz+1, 0:nx-1)
-            double precision              :: psig(0:nz, 0:nx-1)
 
             psig = vortg(0:nz, 0:nx-1)
 
@@ -144,9 +82,62 @@ module parcel_vmin
 
             vortgradmagg = dsqrt(vortgradmagg**2 +dvortdz**2)
 
+            gfield = f12 * dsqrt(((velgradg(0:nz, :, 1) - velgradg(0:nz, :, 4)) ** 2 + &
+                                        (velgradg(0:nz, :, 2) + velgradg(0:nz, :, 3)) ** 2))
+
+            dbdz(0:nz, :) = f12 * dxi(2) * (tbuoyg(1:nz+1, :) - tbuoyg(-1:nz-1, :))
+
+            bfield = dsqrt(dsqrt(vtend(0:nz, :) ** 2 + dbdz ** 2))
+
+            do kx=0,nx-1
+              do iz=0,nz
+                gfield(iz,kx)=max(epsilon(gfield(iz,kx)),gfield(iz,kx))
+                bfield(iz,kx)=max(epsilon(bfield(iz,kx)),bfield(iz,kx))
+              enddo
+            enddo
+
+            do kx=0,nx-1
+              do iz=0,nz
+                vortgradmagg(iz,kx)=max(epsilon(vortgradmagg(iz,kx)),vortgradmagg(iz,kx))
+              enddo
+            enddo
+
+            gmax=maxval(gfield)
+            bmax=maxval(bfield)
             vortgradmax = maxval(vortgradmagg)
 
-        end subroutine get_vortgradmag
+            parcels%vmin(1:n_parcels)=zero
+
+            !$omp parallel default(shared)
+            !$omp do private(n, l, is, js, weights,glocal,blocal,vmintemp,vortgradlocal)
+            do n = 1, n_parcels
+              call trilinear(parcels%position(n, :), is, js, weights)
+              glocal=zero
+              do l = 1, ngp
+                glocal = glocal + weights(l)*gfield(js(l), is(l))
+              enddo
+              vmintemp=vmin_nu_factor*vcutoff*gmax/glocal
+              blocal=zero
+              do l = 1, ngp
+                blocal = blocal + weights(l)*bfield(js(l), is(l))
+              enddo
+              vmintemp=min(vmintemp,vmin_nu_factor*vcutoff*bmax/blocal)
+              vortgradlocal=zero
+              do l = 1, ngp
+                vortgradlocal = vortgradlocal + weights(l)*vortgradmagg(js(l), is(l))
+              enddo
+              vmintemp=min(vmintemp,((vcutoff**f32)*vmin_nu_factor*vortgradmax/vortgradlocal)**f23)
+              if(vmintemp>vkeep) then
+                vmintemp=vkeep
+              elseif(vmintemp<vcutoff) then
+                vmintemp=vcutoff
+              endif
+              parcels%vmin(n)=vmintemp
+            enddo
+            !$omp end do
+            !$omp end parallel
+
+        end subroutine get_parcel_vmin_part_2
 
 end module parcel_vmin
 

@@ -537,7 +537,7 @@ module h5_writer
                 call write_h5_int_scalar_attrib(group, "n_per_cell", parcel%n_per_cell)
                 call write_h5_double_scalar_attrib(group, "lambda", parcel%lambda_max)
                 call write_h5_double_scalar_attrib(group, "cutoff_vratio", parcel%cutoff_vratio)
-                call write_h5_double_scalar_attrib(group, "vmin_dt_factor", parcel%vmin_dt_factor)
+                call write_h5_double_scalar_attrib(group, "vmin_nu_factor", parcel%vmin_nu_factor)
                 call write_h5_int_scalar_attrib(group, "correction_iters", parcel%correction_iters)
                 call write_h5_double_scalar_attrib(group, "gradient_pref", parcel%gradient_pref)
                 call write_h5_double_scalar_attrib(group, "max_compression", parcel%max_compression)
