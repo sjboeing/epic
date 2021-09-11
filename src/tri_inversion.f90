@@ -16,24 +16,29 @@ module tri_inversion
     integer :: vor2vel_timer,  &
                vtend_timer
 
+    ! Wavenumbers::
+    double precision, allocatable :: hrkx(:), rkx(:)
+
+    ! Quantities needed in FFTs:
+    double precision, allocatable :: xtrig(:)
+    integer                       :: xfactors(5)
+
     private
         ! Tri-diagonal arrays:
         double precision, allocatable :: ap(:)
         double precision, allocatable :: etdh(:, :), htdh(:, :)
         double precision, allocatable :: etd0(:), htd0(:)
 
-        ! Wavenumbers::
-        double precision, allocatable :: hrkx(:), rkx(:)
-
-        ! Quantities needed in FFTs:
-        double precision, allocatable :: xtrig(:)
-        integer                       :: xfactors(5)
 
     public :: init_inversion,       &
               vor2vel,              &
               vorticity_tendency,   &
               vor2vel_timer,        &
-              vtend_timer
+              vtend_timer,          &
+              hrkx,                 &
+              rkx,                  &
+              xtrig,                &
+              xfactors
 
     contains
 
