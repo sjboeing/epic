@@ -59,7 +59,7 @@ module parcel_vmin
               do l = 1, ngp
                 vortgrad2mag= vortgrad2mag+weights(l)*vortgrad2magg(js(l), is(l))
               enddo
-              parcels%vmin(n)=min(parcels%vmin(n),vcutoff*(vortgrad2max)/(parcel%vmin_dt_factor*vortgrad2mag))
+              parcels%vmin(n)=min(parcels%vmin(n),vcutoff*(vortgrad2max)/(parcel%vmin_dt_factor*parcel%vmin_dt_factor*vortgrad2mag))
               if(parcels%vmin(n)<vcutoff) then
                 parcels%vmin(n)=vcutoff
               elseif(parcels%vmin(n)>vkeep) then
