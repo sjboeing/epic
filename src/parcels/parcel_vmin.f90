@@ -117,16 +117,18 @@ module parcel_vmin
                 glocal = glocal + weights(l)*gfield(js(l), is(l))
               enddo
               vmintemp=vmin_nu_factor*vcutoff*gmax/glocal
-              blocal=zero
-              do l = 1, ngp
-                blocal = blocal + weights(l)*bfield(js(l), is(l))
-              enddo
-              vmintemp=min(vmintemp,vmin_nu_factor*vcutoff*bmax/blocal)
+              if(bmax>2.0*epsilon(bmax)) then
+                blocal=zero
+                do l = 1, ngp
+                  blocal = blocal + weights(l)*bfield(js(l), is(l))
+                enddo
+                vmintemp=min(vmintemp,vmin_nu_factor*vcutoff*bmax/blocal)
+              endif
               vortgradlocal=zero
               do l = 1, ngp
                 vortgradlocal = vortgradlocal + weights(l)*vortgradmagg(js(l), is(l))
               enddo
-              vmintemp=min(vmintemp,((vcutoff**f32)*vmin_nu_factor*vortgradmax/vortgradlocal)**f23)
+              vmintemp=min(vmintemp,vcutoff*(vmin_nu_factor*vortgradmax/vortgradlocal)**f23)
               if(vmintemp>vkeep) then
                 vmintemp=vkeep
               elseif(vmintemp<vcutoff) then
