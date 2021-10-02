@@ -263,7 +263,7 @@ def _bokeh_plot_hybrid(h5reader, h5reader_f, step_parcel, step_field, coloring, 
     graph.image(image=[zoomed_image], x=origin[0], y=origin[1], dw=extent[0], dh=extent[1], color_mapper=color_mapper_2)
 
     graph.ellipse(x='x', y='y', width='width', height='height',angle='angle',
-                  color = mapper,line_color=None,source=source)
+                  color = mapper,line_color=None,source=source,fill_alpha=0.7)
     graph.add_layout(color_bar, 'right')
 
     return graph
