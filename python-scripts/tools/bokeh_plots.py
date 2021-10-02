@@ -10,6 +10,13 @@ from scipy import ndimage
 import numpy as np
 
 def _bokeh_plot_parcels(h5reader, step, coloring, vmin, vmax, display=None, **kwargs):
+    no_title = kwargs.pop('no_title', False)
+    no_xaxis = kwargs.pop('no_xaxis', False)
+    no_yaxis = kwargs.pop('no_yaxis', False)
+    no_xlabel = kwargs.pop('no_xlabel', False)
+    no_ylabel = kwargs.pop('no_ylabel', False)
+    no_colorbar = kwargs.pop('no_colorbar', False)
+
     nsteps = h5reader.get_num_steps()
     extent = h5reader.get_box_extent()
     origin = h5reader.get_box_origin()
@@ -18,6 +25,7 @@ def _bokeh_plot_parcels(h5reader, step, coloring, vmin, vmax, display=None, **kw
     right = origin[0] + extent[0]
     bottom = origin[1]
     top = origin[1] + extent[1]
+
 
     # instantiating the figure object
     fkwargs = {k: v for k, v in kwargs.items() if v is not None}
@@ -52,17 +60,30 @@ def _bokeh_plot_parcels(h5reader, step, coloring, vmin, vmax, display=None, **kw
     else:
         title = coloring
 
+    title = title + \
+                    '\t\t\t\t time = %15.3f'%ttime + \
+                    '\t\t\t\t #parcels = %10d'%nparcels
+    if no_title:
+        title = None
+
+    x_axis_label = 'x (m)'
+    y_axis_label = 'y (m)'
+
+    if no_xlabel:
+        x_axis_label = ' '
+
+    if no_ylabel:
+        y_axis_label = ' '
+
     graph = bpl.figure(output_backend="webgl",
                        plot_width=pw,
                        plot_height = ph,
                        aspect_ratio = (right-left)/(top-bottom),
                        x_range = (left, right),
                        y_range = (bottom, top),
-                       x_axis_label='x (m)',
-                       y_axis_label='y (m)',
-                       title = title + \
-                       '\t\t\t\t time = %15.3f'%ttime + \
-                       '\t\t\t\t #parcels = %10d'%nparcels)
+                       x_axis_label = x_axis_label,
+                       y_axis_label = y_axis_label,
+                       title = title)
 
     # 20 July 2021
     # https://stackoverflow.com/questions/32158939/python-bokeh-remove-toolbar-from-chart
@@ -81,6 +102,17 @@ def _bokeh_plot_parcels(h5reader, step, coloring, vmin, vmax, display=None, **kw
     graph.yaxis.axis_label_text_font = text_font
     graph.yaxis.major_label_text_font = text_font
 
+    if no_xaxis:
+        # 27 Sept. 2021
+        # https://stackoverflow.com/questions/30545372/hide-axis-in-bokeh
+        # https://stackoverflow.com/questions/36112404/bokeh-gridplot-tighten-layout-and-outer-sidelabels
+        #graph.xaxis.visible = False
+        graph.xaxis.major_label_text_font_size ='0pt'
+
+    if no_yaxis:
+        graph.yaxis.major_label_text_font_size ='0pt'
+        #graph.xaxis.visible = False
+
     graph.yaxis.formatter.use_scientific = bokeh_style['formatter.use_scientific']
     graph.xaxis.formatter.use_scientific = bokeh_style['formatter.use_scientific']
     graph.yaxis.formatter.power_limit_low = bokeh_style['formatter.power_limit_low']
@@ -90,8 +122,9 @@ def _bokeh_plot_parcels(h5reader, step, coloring, vmin, vmax, display=None, **kw
     graph.yaxis.formatter.precision = bokeh_style['formatter.precision']
     graph.xaxis.formatter.precision = bokeh_style['formatter.precision']
 
-    graph.title.text_font_size = font_size
-    graph.title.text_font = text_font
+    if not no_title:
+        graph.title.text_font_size = font_size
+        graph.title.text_font = text_font
 
     x, y, width, height, angle = h5reader.get_ellipses_for_bokeh(step)
 
@@ -134,7 +167,9 @@ def _bokeh_plot_parcels(h5reader, step, coloring, vmin, vmax, display=None, **kw
 
     graph.ellipse(x='x', y='y', width='width', height='height',angle='angle',
                   color = mapper,fill_alpha=0.75,line_color=None,source=source)
-    graph.add_layout(color_bar, 'right')
+
+    if not no_colorbar:
+        graph.add_layout(color_bar, 'right')
 
     return graph
 
@@ -272,6 +307,8 @@ def _bokeh_plot_hybrid(h5reader, h5reader_f, step_parcel, step_field, coloring, 
 def bokeh_plot_parcels(fname, step, show=False, fmt='png',
                        coloring='aspect-ratio', display='full HD', **kwargs):
 
+    jpg_quality = kwargs.pop('jpg_quality', 60)
+
     h5reader = H5Reader()
 
     h5reader.open(fname)
@@ -294,8 +331,8 @@ def bokeh_plot_parcels(fname, step, show=False, fmt='png',
         extent = h5reader.get_box_extent()
         ncells = h5reader.get_box_ncells()
         vcell = np.prod(extent / ncells)
-        vmin = vcell / h5reader.get_parcel_option('vmin_fraction')
-        vmax = vcell / h5reader.get_parcel_option('vmax_fraction')
+        vmin = vcell / h5reader.get_parcel_option('min_vratio')
+        vmax = vcell / h5reader.get_parcel_option('max_vratio')
     else:
         vmin, vmax = h5reader.get_dataset_min_max(coloring)
 
@@ -309,6 +346,23 @@ def bokeh_plot_parcels(fname, step, show=False, fmt='png',
     elif fmt == 'svg':
         export_svg(graph, filename = 'parcels_'  + coloring + '_step_' + \
             str(step).zfill(len(str(nsteps))) + '.svg')
+    elif fmt == 'jpg':
+        # save a temporary PNG
+        export_png(graph, filename = 'bokeh_tmp_figure.png')
+
+        # 29 Sept. 2021
+        # https://stackoverflow.com/questions/4353019/in-pythons-pil-how-do-i-change-the-quality-of-an-image
+        # https://stackoverflow.com/questions/43258461/convert-png-to-jpeg-using-pillow
+        from PIL import Image
+        im = Image.open('bokeh_tmp_figure.png')
+        rgb_im = im.convert('RGB')
+        rgb_im.save('parcels_'  + coloring + '_step_' + \
+            str(step).zfill(len(str(nsteps))) + '.jpg', quality=jpg_quality)
+
+        # delete temporary PNG
+        import os
+        os.remove('bokeh_tmp_figure.png')
+
     else:
         raise IOError("Bokeh plot does not support '" + fmt + "' format.")
 

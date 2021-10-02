@@ -1,6 +1,7 @@
 from tools.h5_reader import H5Reader
 from tools.plot_beautify import *
 from tools.plot_style import *
+from tools.units import *
 import matplotlib.colors as cls
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -152,7 +153,7 @@ def plot_volume_symmetry_error(fnames, show=False, fmt="png", **kwargs):
             raise IOError('Not a field output file.')
 
         try:
-            h5reader.get_dataset(0, 'symmetry volume')
+            h5reader.get_step_attribute(0, 'max symmetry volume error')
         except:
             raise IOError('This plot is only available in debug mode.')
 
@@ -161,30 +162,22 @@ def plot_volume_symmetry_error(fnames, show=False, fmt="png", **kwargs):
         vmax = np.zeros(nsteps)
         t = np.zeros(nsteps)
         for step in range(nsteps):
-            sym_volg = h5reader.get_dataset(step, 'symmetry volume')
-            min_err = abs(sym_volg.min())
-            max_err = abs(sym_volg.max())
-            vmax[step] = max(min_err, max_err)
+            vmax[step] = h5reader.get_step_attribute(step, 'max symmetry volume error')
             t[step] = h5reader.get_step_attribute(step, 't')
 
         h5reader.close()
 
-        label = labels[i]
-        if label is None:
-            label = os.path.splitext(fname)[0]
-            label = label.split('_fields')[0]
-
-        plt.fill_between(t, 0, vmax, color=colors[i], label=label,
+        plt.fill_between(t, 0, vmax, color=colors[i], label=labels[i],
                         edgecolor=colors[i], linewidth=0.75)
 
     plt.grid(which='both', linestyle='dashed')
-    plt.xlabel(r'time (s)')
+    plt.xlabel(get_label('time', units['time']))
     plt.ylabel(r'volume symmetry error')
     plt.yscale('log')
     #plt.ticklabel_format(axis='y', style='scientific', scilimits=(0, 0))
 
 
-    if n > 1:
+    if not labels[0] is None:
         plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
                    bbox_to_anchor=legend_dict['bbox_to_anchor'])
 
@@ -208,6 +201,8 @@ def plot_rms_volume_error(fnames, show=False, fmt="png", **kwargs):
     n = len(fnames)
 
     labels = kwargs.pop('labels', n * [None])
+    yscale = kwargs.pop('yscale', 'linear')
+    ylim = kwargs.pop('ylim', (None, None))
 
     if len(labels) < n:
         raise ValueError('Not enough labels provided.')
@@ -227,19 +222,18 @@ def plot_rms_volume_error(fnames, show=False, fmt="png", **kwargs):
         t = h5reader.get_diagnostic('t')
         h5reader.close()
 
-        label = labels[i]
-        if label is None:
-            label = os.path.splitext(fname)[0]
-            label = label.split('_fields')[0]
+        plt.plot(t, vrms, label=labels[i], linewidth=2, color=colors[i])
 
-        plt.plot(t, vrms, label=label, linewidth=2, color=colors[i])
-
-    plt.xlabel(r'time (s)')
+    plt.xlabel(get_label('time', units['time']))
     plt.ticklabel_format(axis='y', style='scientific', scilimits=(0, 0))
-    plt.ylabel(r'rms volume error')
-    plt.grid(linestyle='dashed', zorder=-1)
-    plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
-               bbox_to_anchor=legend_dict['bbox_to_anchor'])
+    plt.ylabel(r'rms area error')
+    plt.grid(which='both', linestyle='dashed', zorder=-1)
+
+    if not labels[0] is None:
+        plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
+                   bbox_to_anchor=legend_dict['bbox_to_anchor'])
+    plt.yscale(yscale)
+    plt.ylim(ylim)
     plt.tight_layout()
 
     if show:
@@ -276,19 +270,16 @@ def plot_max_volume_error(fnames, show=False, fmt="png", **kwargs):
         t = h5reader.get_diagnostic('t')
         h5reader.close()
 
-        label = labels[i]
-        if label is None:
-            label = os.path.splitext(fname)[0]
-            label = label.split('_fields')[0]
-
-        plt.plot(t, vmax, label=label, linewidth=2, color=colors[i])
+        plt.plot(t, vmax, label=labels[i], linewidth=2, color=colors[i])
 
     plt.ticklabel_format(axis='y', style='scientific', scilimits=(0, 0))
-    plt.xlabel(r'time (s)')
+    plt.xlabel(get_label('time', units['time']))
     plt.ylabel(r'max normalised volume error')
     plt.grid(linestyle='dashed', zorder=-1)
-    plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
-               bbox_to_anchor=legend_dict['bbox_to_anchor'])
+
+    if not labels[0] is None:
+        plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
+                   bbox_to_anchor=legend_dict['bbox_to_anchor'])
     plt.tight_layout()
 
     if show:
@@ -358,22 +349,17 @@ def plot_parcel_profile(fnames, show=False, fmt="png", **kwargs):
 
         h5reader.close()
 
-        label = labels[i]
-        if label is None:
-            label = os.path.splitext(fname)[0]
-            label = label.split('_parcels')[0]
-
-        plt.plot(t, data_mean, label=label, color=colors[i])
+        plt.plot(t, data_mean, label=labels[i], color=colors[i])
         plt.fill_between(t, data_mean - data_std, data_mean + data_std,
                          alpha=0.5, color=colors[i])
 
 
-    plt.xlabel(r'time (s)')
+    plt.xlabel(get_label('time', units['time']))
     plt.grid(linestyle='dashed', zorder=-1)
 
     if dset == 'aspect-ratio':
         plt.ylabel(r'aspect ratio $\lambda$')
-        plt.text(t[10], lmax - 0.5, r'$\lambda\le\lambda_{max} = ' + str(lmax) + '$')
+        plt.text(t[10], 0.92 * lmax, r'$\lambda\le\lambda_{max} = ' + str(lmax) + '$')
         plt.axhline(lmax, linestyle='dashed', color='black')
     elif dset == 'volume':
         plt.ylabel(r'parcel volume / $V_{g}$')
@@ -382,7 +368,7 @@ def plot_parcel_profile(fnames, show=False, fmt="png", **kwargs):
     else:
         plt.ylabel(r'parcel ' + dset)
 
-    if n > 1:
+    if not labels[0] is None:
         plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
                    bbox_to_anchor=legend_dict['bbox_to_anchor'])
 
@@ -394,6 +380,89 @@ def plot_parcel_profile(fnames, show=False, fmt="png", **kwargs):
         prefix = os.path.splitext(fnames[0])[0] + '_'
         if n > 1:
             prefix = ''
+        plt.savefig(prefix + 'parcel_' + dset + '_profile.' + fmt,
+                    bbox_inches='tight')
+    plt.close()
+
+
+def plot_parcel_stats_profile(fnames, show=False, fmt="png", **kwargs):
+    """
+    Plot parcel statistics
+    """
+    n = len(fnames)
+
+    labels = kwargs.pop('labels', n * [None])
+    dset = kwargs.pop('dset', 'aspect-ratio')
+
+    if dset == 'aspect-ratio':
+        dset = 'aspect ratio'
+
+    colors =  plt.cm.tab10(np.arange(n).astype(int))
+
+    if len(labels) < n:
+        raise ValueError('Not enough labels provided.')
+
+    h5reader = H5Reader()
+
+    plt.figure()
+
+    lmax = 0
+
+    for i, fname in enumerate(fnames):
+
+        h5reader.open(fname)
+
+        if not h5reader.is_parcel_stats_file:
+            raise IOError('Not a parcel diagnostic output file.')
+
+        nsteps = h5reader.get_num_steps()
+
+        data_mean = np.zeros(nsteps)
+        data_std = np.zeros(nsteps)
+        t = np.zeros(nsteps)
+
+        for step in range(nsteps):
+            t[step] = h5reader.get_step_attribute(step, 't')
+            data_mean[step] = h5reader.get_step_attribute(step, 'avg ' + dset)
+            data_std[step] = h5reader.get_step_attribute(step, 'std ' + dset)
+
+        if dset == 'aspect ratio':
+            lmax = max(lmax, h5reader.get_parcel_option('lambda'))
+
+        h5reader.close()
+
+        plt.plot(t, data_mean, label=labels[i], color=colors[i])
+        plt.fill_between(t, data_mean - data_std, data_mean + data_std,
+                         alpha=0.5, color=colors[i])
+
+
+    plt.xlabel(get_label('time', units['time']))
+    plt.grid(linestyle='dashed', zorder=-1)
+
+    if dset == 'aspect-ratio':
+        plt.ylabel(r'aspect ratio $\lambda$')
+        plt.text(t[10], 0.95 * lmax, r'$\lambda\le\lambda_{max} = ' + str(lmax) + '$')
+        plt.axhline(lmax, linestyle='dashed', color='black')
+    elif dset == 'volume':
+        plt.ylabel(r'parcel volume / $V_{g}$')
+        #plt.axhline(1.0, linestyle='dashed', color='black',
+                #label=r'cell volume $V_{g}$')
+    else:
+        plt.ylabel(r'parcel ' + dset)
+
+    if not labels[0] is None:
+        plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
+                   bbox_to_anchor=legend_dict['bbox_to_anchor'])
+
+    plt.tight_layout()
+
+    if show:
+        plt.show()
+    else:
+        prefix = os.path.splitext(fnames[0])[0] + '_'
+        if n > 1:
+            prefix = ''
+        dset = dset.replace(' ', '_')
         plt.savefig(prefix + 'parcel_' + dset + '_profile.' + fmt,
                     bbox_inches='tight')
     plt.close()
@@ -428,11 +497,7 @@ def plot_parcel_number(fnames, show=False, fmt="png", **kwargs):
 
         h5reader.close()
 
-        label = None
-        if not labels[i] is None:
-            label = labels[i]
-
-        plt.plot(t, nparcels, label=label)
+        plt.plot(t, nparcels, label=labels[i])
 
     plt.grid(linestyle='dashed', zorder=-1)
 
@@ -441,7 +506,7 @@ def plot_parcel_number(fnames, show=False, fmt="png", **kwargs):
                    ncol=min(len(labels), legend_dict['ncol']),
                    bbox_to_anchor=legend_dict['bbox_to_anchor'])
 
-    plt.xlabel(r'time (s)')
+    plt.xlabel(get_label('time', units['time']))
     plt.ylabel(r'parcel count')
     plt.tight_layout()
 
@@ -451,6 +516,56 @@ def plot_parcel_number(fnames, show=False, fmt="png", **kwargs):
         plt.savefig('parcel_number_profile.' + fmt, bbox_inches='tight')
     plt.close()
 
+
+def plot_small_parcel_number(fnames, show=False, fmt="png", **kwargs):
+    """
+    Plot the number of small parcels in simulation.
+    """
+    labels = kwargs.pop('labels', None)
+
+    if labels is None:
+        labels = [None] * len(fnames)
+
+    plt.figure()
+    for i, fname in enumerate(fnames):
+
+        h5reader = H5Reader()
+        h5reader.open(fname)
+
+        if not h5reader.is_parcel_stats_file:
+            raise IOError('Not a parcel diagnostic output file.')
+
+        nsteps = h5reader.get_num_steps()
+
+        nparcels = np.zeros(nsteps)
+        nsmall = np.zeros(nsteps)
+        t = np.zeros(nsteps)
+
+        for step in range(nsteps):
+            nparcels[step] = h5reader.get_step_attribute(step, 'num parcel')
+            nsmall[step] = h5reader.get_step_attribute(step, 'num small parcels')
+            t[step] = h5reader.get_step_attribute(step, 't')
+
+        h5reader.close()
+
+        plt.plot(t, nsmall / nparcels * 100.0, label=labels[i])
+
+    plt.grid(linestyle='dashed', zorder=-1)
+
+    if not labels[0] is None:
+        plt.legend(loc=legend_dict['loc'],
+                   ncol=min(len(labels), legend_dict['ncol']),
+                   bbox_to_anchor=legend_dict['bbox_to_anchor'])
+
+    plt.xlabel(get_label('time', units['time']))
+    plt.ylabel(r'percentage of small parcels (\%)')
+    plt.tight_layout()
+
+    if show:
+        plt.show()
+    else:
+        plt.savefig('parcel_small_number_profile.' + fmt, bbox_inches='tight')
+    plt.close()
 
 def plot_center_of_mass(fnames, show=False, fmt="png", dset='buoyancy', **kwargs):
 
@@ -485,106 +600,67 @@ def plot_center_of_mass(fnames, show=False, fmt="png", dset='buoyancy', **kwargs
 
         h5reader.open(fname)
 
-        if not h5reader.is_parcel_file:
-            raise IOError('Not a parcel output file.')
+        if not h5reader.is_parcel_stats_file:
+            raise IOError('Not a parcel diagnostic output file.')
 
         nsteps = h5reader.get_num_steps()
 
-        bi_vi = np.zeros(nsteps-1)
-        bi_vi_xi = np.zeros(nsteps-1)
-        bi_vi_zi = np.zeros(nsteps-1)
+        t = np.zeros(nsteps)
 
-        bi_vi_x2i = np.zeros(nsteps-1)
-        bi_vi_z2i = np.zeros(nsteps-1)
+        xb_bar = np.zeros(nsteps)
+        zb_bar = np.zeros(nsteps)
+        x2b_bar = np.zeros(nsteps)
+        z2b_bar = np.zeros(nsteps)
+        xzb_bar = np.zeros(nsteps)
+        xw_bar = np.zeros(nsteps)
+        zw_bar = np.zeros(nsteps)
+        x2w_bar = np.zeros(nsteps)
+        z2w_bar = np.zeros(nsteps)
+        xzw_bar = np.zeros(nsteps)
 
-        wi_vi = np.zeros(nsteps-1)
-        wi_vi_xi = np.zeros(nsteps-1)
-        wi_vi_zi = np.zeros(nsteps-1)
 
-        wi_vi_x2i = np.zeros(nsteps-1)
-        wi_vi_z2i = np.zeros(nsteps-1)
+        ## skip zero step since vorticity is not given
+        for j in range(0, nsteps):
 
-        xi_zi = np.zeros(nsteps-1)
+            t[j] = h5reader.get_step_attribute(j, 't')
+            xb_bar[j] = h5reader.get_step_attribute(j, 'xb_bar')
+            zb_bar[j] = h5reader.get_step_attribute(j, 'zb_bar')
+            x2b_bar[j] = h5reader.get_step_attribute(j, 'x2b_bar')
+            z2b_bar[j] = h5reader.get_step_attribute(j, 'z2b_bar')
+            xzb_bar[j] = h5reader.get_step_attribute(j, 'xzb_bar')
+            xw_bar[j] = h5reader.get_step_attribute(j, 'xv_bar')
+            zw_bar[j] = h5reader.get_step_attribute(j, 'zv_bar')
+            x2w_bar[j] = h5reader.get_step_attribute(j, 'x2v_bar')
+            z2w_bar[j] = h5reader.get_step_attribute(j, 'z2v_bar')
+            xzw_bar[j] = h5reader.get_step_attribute(j, 'xzv_bar')
 
-        t = np.zeros(nsteps-1)
-
-        # skip zero step since vorticity is not given
-        for j in range(1, nsteps):
-
-            pos = h5reader.get_dataset(j, 'position')
-            vol = h5reader.get_dataset(j, 'volume')
-            vor = h5reader.get_dataset(j, 'vorticity')
-            buo = h5reader.get_dataset(j, 'buoyancy')
-            t[j-1] = h5reader.get_step_attribute(j, 't')
-
-            # we only want parcels with x > 0
-            ind = (pos[0, :] > 0.0)
-
-            pos = pos[:, ind]
-            vol = vol[ind]
-            vor = vor[ind]
-            buo = buo[ind]
-
-            bv = buo * vol
-            vv = vor * vol
-
-            # first moment
-            bi_vi[j-1] = bv.mean()
-            bi_vi_xi[j-1] = (bv * pos[0, :]).mean()
-            bi_vi_zi[j-1] = (bv * pos[1, :]).mean()
-
-            # second moment
-            bi_vi_x2i[j-1] = (bv * pos[0, :] ** 2).mean()
-            bi_vi_z2i[j-1] = (bv * pos[1, :] ** 2).mean()
-
-            # first moment
-            wi_vi[j-1] = vv.mean()
-            wi_vi_xi[j-1] = (vv * pos[0, :]).mean()
-            wi_vi_zi[j-1] = (vv * pos[1, :]).mean()
-
-            # second moment
-            wi_vi_x2i[j-1] = (vv * pos[0, :] ** 2).mean()
-            wi_vi_z2i[j-1] = (vv * pos[1, :] ** 2).mean()
-
-            bi_vi_xi_zi = (bv * pos[0, :] * pos[1, :]).mean()
-            wi_vi_xi_zi = (vv * pos[0, :] * pos[1, :]).mean()
 
         h5reader.close()
-
-        xb_bar = bi_vi_xi / bi_vi
-        zb_bar = bi_vi_zi / bi_vi
-        xw_bar = wi_vi_xi / wi_vi
-        zw_bar = wi_vi_zi / wi_vi
 
         data = {
             't':        t,
             'xb_bar':   xb_bar,
             'zb_bar':   zb_bar,
-            'x2b_bar':  bi_vi_x2i / bi_vi - xb_bar ** 2,
-            'z2b_bar':  bi_vi_z2i / bi_vi - zb_bar ** 2,
-            'xzb_bar':  bi_vi_xi_zi / bi_vi - xb_bar * zb_bar,
+            'x2b_bar':  x2b_bar,
+            'z2b_bar':  z2b_bar,
+            'xzb_bar':  xzb_bar,
             'xw_bar':   xw_bar,
             'zw_bar':   zw_bar,
-            'x2w_bar':  wi_vi_x2i / wi_vi - xw_bar ** 2,
-            'z2w_bar':  wi_vi_z2i / wi_vi - zw_bar ** 2,
-            'xzw_bar':  wi_vi_xi_zi / wi_vi - xw_bar * zw_bar
+            'x2w_bar':  x2w_bar,
+            'z2w_bar':  z2w_bar,
+            'xzw_bar':  xzw_bar,
         }
 
         df = pd.DataFrame(data=data)
 
-        label = None
-        if not labels[i] is None:
-            label = labels[i]
-
-
-        ax1.plot(df['t'], df['x' + tag + '_bar'], label=label, color=colors[i])
+        ax1.plot(df['t'], df['x' + tag + '_bar'], label=labels[i], color=colors[i])
 
         if variance:
             std = np.sqrt(df['x2' + tag + '_bar'])
             ax1.fill_between(df['t'], df['x' + tag + '_bar']-std, df['x' + tag + '_bar']+std, alpha=0.5,
                              color=colors[i], edgecolor='None')
 
-        ax2.plot(df['t'], df['z' + tag + '_bar'], label=label, color=colors[i])
+        ax2.plot(df['t'], df['z' + tag + '_bar'], label=labels[i], color=colors[i])
 
         if variance:
             std = np.sqrt(df['z2' + tag + '_bar'])
@@ -594,7 +670,7 @@ def plot_center_of_mass(fnames, show=False, fmt="png", dset='buoyancy', **kwargs
     ax1.grid(which='both', linestyle='dashed')
     ax2.grid(which='both', linestyle='dashed')
 
-    if not label is None:
+    if not labels[0] is None:
         ax1.legend(loc=legend_dict['loc'],
                    ncol=legend_dict['ncol'],
                    bbox_to_anchor=legend_dict['bbox_to_anchor'])
@@ -659,18 +735,13 @@ def plot_cumulative(fnames, step=0, dset='volume', show=False, fmt="png", **kwar
 
         h5reader.close()
 
-        label = labels[i]
-        if label is None:
-            label = os.path.splitext(fname)[0]
-            label = label.split('_parcels')[0]
-
         sns.ecdfplot(data=data, x=dset, stat='proportion',
-                     color=colors[i], label=label)
+                     color=colors[i], label=labels[i])
 
     plt.ylabel('proportion')
     plt.grid(which='both', linestyle='dashed')
 
-    if n > 1:
+    if not labels[0] is None:
         plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
                    bbox_to_anchor=legend_dict['bbox_to_anchor'])
 
@@ -695,6 +766,7 @@ def plot_parcels_per_cell(fnames, show=False, fmt="png", **kwargs):
     n = len(fnames)
 
     labels = kwargs.pop('labels', n * [None])
+    add_minmax = kwargs.pop('add_minmax', True)
 
     if len(labels) < n:
         raise ValueError('Not enough labels provided.')
@@ -705,37 +777,39 @@ def plot_parcels_per_cell(fnames, show=False, fmt="png", **kwargs):
         h5reader = H5Reader()
         h5reader.open(fname)
 
-        if h5reader.is_parcel_file:
-            raise IOError('Not a field output file.')
+        if not h5reader.is_field_stats_file:
+            raise IOError('Not a field diagnostic output file.')
 
         nsteps = h5reader.get_num_steps()
 
-        n_mean = np.zeros(nsteps)
-        n_std = np.zeros(nsteps)
+        n_avg = np.zeros(nsteps)
+
+        if add_minmax:
+            n_min = np.zeros(nsteps)
+            n_max = np.zeros(nsteps)
+
         t = np.zeros(nsteps)
 
         for step in range(nsteps):
-            data = h5reader.get_dataset(step, 'nparg')
-
-            n_mean[step] = data.mean()
-            n_std[step] = data.std()
+            n_avg[step] = h5reader.get_step_attribute(step, 'average num parcels per cell')
             t[step] = h5reader.get_step_attribute(step, 't')
+
+            if add_minmax:
+                n_min[step] = h5reader.get_step_attribute(step, 'min num parcels per cell')
+                n_max[step] = h5reader.get_step_attribute(step, 'max num parcels per cell')
 
         h5reader.close()
 
-        label = labels[i]
-        if label is None:
-            label = os.path.splitext(fname)[0]
-            label = label.split('_parcels')[0]
+        plt.plot(t, n_avg, color=colors[i], label=labels[i])
 
-        plt.plot(t, n_mean, color=colors[i], label=label)
-        plt.fill_between(t, n_mean - n_std, n_mean + n_std, color=colors[i], alpha=0.5)
+        if add_minmax:
+            plt.fill_between(t, n_min, n_max, color=colors[i], alpha=0.5, edgecolor=None)
 
-    plt.xlabel(r'time (s)')
+    plt.xlabel(get_label('time', units['time']))
     plt.ylabel(r'number of parcels/cell')
     plt.grid(which='both', linestyle='dashed')
 
-    if n > 1:
+    if not labels[0] is None:
         plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
                    bbox_to_anchor=legend_dict['bbox_to_anchor'])
 
@@ -752,14 +826,69 @@ def plot_parcels_per_cell(fnames, show=False, fmt="png", **kwargs):
     plt.close()
 
 
-def plot_time_pie_chart(fname, show=False, fmt="png"):
+def plot_energy(fnames, show=False, fmt="png", **kwargs):
+    """
+    Plot the kinetic, potential and total energy.
+    """
+    n = len(fnames)
+
+    for i, fname in enumerate(fnames):
+
+        plt.figure(num=i)
+
+        h5reader = H5Reader()
+        h5reader.open(fname)
+
+        if not h5reader.is_parcel_stats_file:
+            raise IOError('Not a parcel diagnostic output file.')
+
+        nsteps = h5reader.get_num_steps()
+
+        pe = np.zeros(nsteps)
+        ke = np.zeros(nsteps)
+        te = np.zeros(nsteps)
+        t = np.zeros(nsteps)
+
+        for step in range(nsteps):
+            pe[step] = h5reader.get_step_attribute(step, 'potential energy')
+            ke[step] = h5reader.get_step_attribute(step, 'kinetic energy')
+            te[step] = h5reader.get_step_attribute(step, 'total energy')
+            t[step] = h5reader.get_step_attribute(step, 't')
+
+        h5reader.close()
+
+        plt.plot(t, pe, label=r'$\mathcal{P}$')
+        plt.plot(t, ke, label=r'$\mathcal{K}$')
+        plt.plot(t, te, label=r'$\mathcal{P}+\mathcal{K}$')
+        plt.xlabel(get_label('time', units['time']))
+        plt.ylabel(r'energy')
+        plt.grid(which='both', linestyle='dashed')
+
+        plt.legend(loc=legend_dict['loc'], ncol=legend_dict['ncol'],
+                   bbox_to_anchor=legend_dict['bbox_to_anchor'])
+
+        plt.tight_layout()
+
+        if show:
+            plt.show()
+        else:
+            prefix = os.path.splitext(fname)[0]
+            prefix = prefix.split('parcel_stats')[0]
+            plt.savefig(prefix + 'energy.' + fmt,
+                        bbox_inches='tight')
+        plt.close()
+
+
+def plot_time_pie_chart(fname, show=False, fmt="png", **kwargs):
     df = pd.read_csv(fname)
 
     # remove epic
     epic_time = df['total time'][0]
     df.drop([0], inplace=True)
 
-    ind = df['percentage'] < 1.0
+    skip = kwargs.pop('skip', 1.0)
+
+    ind = df['percentage'] < skip
     # 25 June 2021
     # https://stackoverflow.com/questions/13851535/how-to-delete-rows-from-a-pandas-dataframe-based-on-a-conditional-expression
     df.drop(df[ind].index, inplace=True)
@@ -775,7 +904,7 @@ def plot_time_pie_chart(fname, show=False, fmt="png"):
 
     n = len(df['function name'])
 
-    plt.figure(figsize=(7, 5))
+    plt.figure()
     ax = plt.gca()
 
     data = list(df['total time'])
@@ -817,6 +946,7 @@ def plot_time_pie_chart(fname, show=False, fmt="png"):
 def plot_time_bar(fnames, show=False, fmt="png", **kwargs):
 
     labels = kwargs.pop('labels', len(fnames) * [None])
+    skip = kwargs.pop('skip', 1.0)
 
     if len(labels) < len(fnames):
         raise ValueError('Not enough labels provided.')
@@ -827,7 +957,7 @@ def plot_time_bar(fnames, show=False, fmt="png", **kwargs):
     epic_time = df['total time'][0]
     df.drop([0], inplace=True)
 
-    ind = df['percentage'] < 1.0
+    ind = df['percentage'] < skip
     df.drop(df[ind].index, inplace=True)
 
     # remove unncessary columns
