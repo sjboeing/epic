@@ -82,6 +82,9 @@
         double precision, allocatable, dimension(:) :: volume
         double precision, allocatable, dimension(:) :: qr
         double precision, allocatable, dimension(:) :: Nr ! droplet number
+        double precision, allocatable, dimension(:) :: dmass ! evaporation mass change rate
+        double precision. allocatable, dimension(:) :: qv ! for evaporation calculations
+        double precision, allocatable, dimension(:) :: theta ! for evaporation calculations 
 
         contains
             procedure :: alloc => prec_parcel_alloc
@@ -228,10 +231,16 @@
             allocate(this%volume(num))
             allocate(this%qr(num))
             allocate(this%Nr(num))
+            allocate(this%dmass(num))
+            allocate(this%qv(num))
+            allocate(this%theta(num))
 
             call this%register_attribute(this%volume, "volume", "m^3")
             call this%register_attribute(this%qr, "qr", "kg/kg")
             call this%register_attribute(this%Nr, "Nr", "/m^3")
+            call this%register_attribute(this%dmass, "dmass", "kg/s")
+            call this%register_attribute(this%qv, "qv", "kg/kg")
+            call this%register_attribute(this%theta, "theta", "K")
 
         end subroutine prec_parcel_alloc
 
@@ -243,6 +252,9 @@
             call try_deallocate(this%volume)
             call try_deallocate(this%qr)
             call try_deallocate(this%Nr)
+            call try_deallocate(this%dmass)
+            call try_deallocate(this%qv)
+            call try_deallocate(this%theta)
 
             call this%base_dealloc
 
@@ -259,10 +271,16 @@
             call resize_array(this%volume, new_size, this%local_num)
             call resize_array(this%qr, new_size, this%local_num)
             call resize_array(this%Nr, new_size, this%local_num)
+            call resize_array(this%dmass, new_size, this%local_num)
+            call resize_array(this%qv, new_size, this%local_num)
+            call resize_array(this%theta, new_size, this%local_num)
 
             call this%reset_attribute(this%volume, "volume")
             call this%reset_attribute(this%qr, "qr")
             call this%reset_attribute(this%Nr, "Nr")
+            call this%reset_attribute(this%dmass, "dmass")
+            call this%reset_attribute(this%qv, "qv")
+            call this%reset_attribute(this%theta, "theta")
 
         end subroutine prec_parcel_resize
 
@@ -679,6 +697,34 @@
          endif
 
     end subroutine sedimentation
+
+    subroutine evaporation(this):
+        class(prec_parcel_type), intent(inout) :: this
+        double precision ::  exn, qv, temp, ro_air, slope, vent_r,abliq, ws,theta,press
+        integer :: n
+
+        !$omp parallel do default(shared) private(n,exn,temp,ro_air,slope,vent_r,abliq,ws,press)
+        do n = 1, this%local_num
+            press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
+            exn = (press/p_ref)**(r_d/c_p)
+            temp = this%theta(n)*exn
+            ro_air = press/(r_d*temp)
+            ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
+            slope = ((pi/6)*(ro_r/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
+            vent_r = two*pi*(this%nr(n))*ro_air* &
+                    (0.78*((one+mu)/(slope)) &
+                    +  0.31*((a1*ro_air/visc)**(f12))*(Sc**(f13))*((ro_0/ro_air)**(f14))  &
+                    * (gamma((f12*b1 +mu +f52))/gamma((1+mu))) &
+                    *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
+                    *((slope)**(-f12*b1 -f32)))
+            !Thermodynamic coefficient
+            abliq = 1/((l_v**2)/(k_a*r_v* (temp**2))) + (1/(ro_air*ws*diffus))
+            !Evaporation rate!
+            this%dmass(n) = (1-this%qv(n)/ws)*vent_r*abliq
+        end do
+        !$omp end parallel do
+
+    end subroutine evaporation
 
   subroutine goners(this)
         class(prec_parcel_type), intent(inout) :: this

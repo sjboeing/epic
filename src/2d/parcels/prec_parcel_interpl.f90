@@ -50,9 +50,11 @@ module prec_parcel_interpl
             prec_tbuoyg = zero
             qrg = zero
             Nrg = zero
+            qvg = zero
+            thetag = zero
             !$omp parallel default(shared)
             !$omp do private(n, p, i, j, points, pvol, btot, is, js, weights) &
-            !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg)
+            !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg,qvg,thetag)
             do n = 1, n_prec_parcels
                 pvol = prec_parcels%volume(n)
 
@@ -75,6 +77,12 @@ module prec_parcel_interpl
                 if(microphysics%l_loading) then
                     prec_tbuoyg(js:js+1, is:is+1) = prec_tbuoyg(js:js+1, is:is+1) &
                                          + weights * btot
+                endif
+                if (microphysics%l_evaporation) then
+                    qvg(js:js+1, is:is+1) = qvg(js:js+1, is:is+1) &
+                                         + weights * prec_parcels%qv(n)
+                    thetag(js:js+1, is:is+1) = thetag(js:js+1, is:is+1) &
+                                         + weights * prec_parcels%theta(n)
                 endif
                 prec_volg(js:js+1, is:is+1) = prec_volg(js:js+1, is:is+1) &
                                    + weights
@@ -109,6 +117,16 @@ module prec_parcel_interpl
             Nrg(:, nx-1) = Nrg(:, nx-1) + Nrg(:, -1)
             Nrg(:, -1)   = Nrg(:, nx-1)
             Nrg(:, nx)   = Nrg(:, 0)
+
+            qvg(:, 0)    = qvg(:, 0) + qvg(:, nx)
+            qvg(:, nx-1) = qvg(:, nx-1) + qvg(:, -1)
+            qvg(:, -1)   = qvg(:, nx-1)
+            qvg(:, nx)   = qvg(:, 0)    
+
+            thetag(:, 0)    = thetag(:, 0) + thetag(:, nx)
+            thetag(:, nx-1) = thetag(:, nx-1) + thetag(:, -1)
+            thetag(:, -1)   = thetag(:, nx-1)
+            thetag(:, nx)   = thetag(:, 0)
 
             ! apply free slip boundary condition
             prec_volg(0,  :) = two * prec_volg(0,  :)
@@ -149,6 +167,26 @@ module prec_parcel_interpl
             Nrg(-1,   :) = two * Nrg(0,  :) - Nrg(1, :)
             Nrg(nz+1, :) = two * Nrg(nz, :) - Nrg(nz-1, :)
 
+            qvg(0,  :) = two * qvg(0,  :)
+            qvg(nz, :) = two * qvg(nz, :)
+            qvg(1,    :) = qvg(1,    :) + qvg(-1,   :)
+            qvg(nz-1, :) = qvg(nz-1, :) + qvg(nz+1, :)
+            qvg(0:nz, :) = qvg(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
+            ! extrapolate to halo grid points (needed to compute
+            ! z derivative used for the time step)
+            qvg(-1,   :) = two * qvg(0,  :) - qvg(1, :)
+            qvg(nz+1, :) = two * qvg(nz, :) - qvg(nz-1, :)
+
+            thetag(0,  :) = two * thetag(0,  :)
+            thetag(nz, :) = two * thetag(nz, :)
+            thetag(1,    :) = thetag(1,    :) + thetag(-1,   :)
+            thetag(nz-1, :) = thetag(nz-1, :) + thetag(nz+1, :)
+            thetag(0:nz, :) = thetag(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
+            ! extrapolate to halo grid points (needed to compute
+            ! z derivative used for the time step)
+            thetag(-1,   :) = two * thetag(0,  :) - thetag(1, :)
+            thetag(nz+1, :) = two * thetag(nz, :) - thetag(nz-1, :)
+
             ! sum halo contribution into internal cells
             ! (be aware that halo cell contribution at upper boundary
             ! are added to cell nz)
@@ -170,8 +208,12 @@ module prec_parcel_interpl
         ! @param[inout] vel is the parcel velocity
         ! @param[in] add contributions, i.e. do not reset parcel quantities to zero before doing grid2par.
         !            (optional)
-        subroutine prec_grid2par(vel, add)
+        !@param[inout] theta is the parcel potential temperature
+        !@param[inout] qv is the parcel water vapor mixing ratio
+        subroutine prec_grid2par(vel,theta,qv, add)
             double precision,     intent(inout) :: vel(:, :)
+            double precision,     intent(inout) :: theta(:)
+            double precision,     intent(inout) :: qv(:)
             logical, optional, intent(in)       :: add
             double precision                    :: points(2)
             integer                             :: n, p, l
@@ -185,6 +227,8 @@ module prec_parcel_interpl
                     !$omp do private(n)
                     do n = 1, n_prec_parcels
                         vel(:, n) = zero
+                        theta(n) = zero
+                        qv(n)    = zero
                     enddo
                     !$omp end do
                     !$omp end parallel
@@ -194,6 +238,8 @@ module prec_parcel_interpl
                 !$omp do private(n)
                 do n = 1, n_prec_parcels
                     vel(:, n) = zero
+                    theta(n) = zero
+                    qv(n)    = zero
                 enddo
                 !$omp end do
                 !$omp end parallel
@@ -213,6 +259,11 @@ module prec_parcel_interpl
                     vel(l, n) = vel(l, n) &
                               + sum(weights * velog(js:js+1, is:is+1, l))
                 end do
+                
+                theta(n) = theta(n) &
+                              + sum(weights * thetag(js:js+1, is:is+1))
+                qv(n)    = qv(n) &
+                              + sum(weights * qvg(js:js+1, is:is+1))
             enddo
             !$omp end do
             !$omp end parallel
