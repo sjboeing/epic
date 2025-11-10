@@ -93,6 +93,7 @@
             procedure :: resize => prec_parcel_resize
             procedure :: get_buoyancy => prec_parcel_get_buoyancy
             procedure :: sedimentation
+            procedure :: evaporation
             procedure :: goners
 
             ! get_buoyancy added here

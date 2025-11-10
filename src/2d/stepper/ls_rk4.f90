@@ -86,7 +86,7 @@ module ls_rk4
                 endif
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
-                    call prec_parcels%evaporation
+                    call prec_parcels%evaporation()
                 endif
             endif
 
