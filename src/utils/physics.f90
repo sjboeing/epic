@@ -82,8 +82,18 @@ module physics
 
     ! pressure scale height
     double precision, protected :: pressure_scale_height = 8619.0 ! Scale height for bomex
-
-
+    ! Evaporation related constants
+    !diffusivity of water on air
+    double precision, protected :: diffus = 2.42e-5
+    !kinematic viscocity of air at sea level
+    double precision, protected :: visc = 1.14e-5
+    !Gas constant for water vapour
+    double precision, protected :: r_v = 461.5
+    ! Schmidt number
+    double precision, protected :: sc = 0.471
+    !Thermal conductivity of air 
+    double precision, parameter :: k_a =0.02623
+    
     ! The following quantities are calculated:
     !
 

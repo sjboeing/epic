@@ -84,6 +84,10 @@ module ls_rk4
                     prec_parcels%local_num = n_prec_parcels
                     call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
                 endif
+                if (microphysics%l_evaporation) then
+                    prec_parcels%local_num = n_prec_parcels
+                    call prec_parcels%evaporation
+                endif
             endif
 
             call calculate_parcel_diagnostics(parcels%delta_pos)
@@ -107,6 +111,10 @@ module ls_rk4
                     if(microphysics%l_sedimentation) then
                         prec_parcels%local_num = n_prec_parcels
                         call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
+                    endif
+                    if (microphysics%l_evaporation) then
+                        prec_parcels%local_num = n_prec_parcels
+                        call prec_parcels%evaporation
                     endif
                 end if
             enddo

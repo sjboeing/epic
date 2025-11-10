@@ -38,6 +38,7 @@ module constants
     double precision, parameter :: f112  = one / 12.d0
     double precision, parameter :: f16   = one / six
     double precision, parameter :: f56   = five / six
+    double precision, parameter :: f52   = five / two
     double precision, parameter :: f76   = 7.d0 / six
     double precision, parameter :: f124  = one / 24.d0
     double precision, parameter :: f1112 = 11.d0 / 12.d0
