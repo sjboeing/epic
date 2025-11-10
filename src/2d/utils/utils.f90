@@ -112,7 +112,7 @@ module utils
             call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain)
 
             if(microphysics%l_precipitation) then
-                call prec_grid2par(parcels%delta_pos)
+                call prec_grid2par(parcels%delta_pos,parcels%theta,parcels%qv)
             endif
 
             call calculate_parcel_diagnostics(parcels%delta_pos)
