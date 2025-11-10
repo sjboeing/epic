@@ -79,7 +79,7 @@ module ls_rk4
             call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain)
 
             if(microphysics%l_precipitation) then
-                call prec_grid2par(prec_parcels%delta_pos)
+                call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
                 if(microphysics%l_sedimentation) then
                     prec_parcels%local_num = n_prec_parcels
                     call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
@@ -114,7 +114,7 @@ module ls_rk4
                     endif
                     if (microphysics%l_evaporation) then
                         prec_parcels%local_num = n_prec_parcels
-                        call prec_parcels%evaporation
+                        call prec_parcels%evaporation()
                     endif
                 end if
             enddo
@@ -166,7 +166,7 @@ module ls_rk4
                 call grid2par_add(parcels%delta_pos, parcels%delta_vor, parcels%strain)
 
                 if(microphysics%l_precipitation) then
-                    call prec_grid2par_add(prec_parcels%delta_pos)
+                    call prec_grid2par_add(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
                 endif
 
                 call start_timer(rk4_timer)

@@ -1,5 +1,6 @@
  module parcel_types
-    use physics, only : glat, lambda_c, q_0, qv_dens_coeff, theta_0, gravity, r_d, c_p, L_v, p_surf, p_ref, pressure_scale_height
+    use physics, only : glat, lambda_c, q_0, qv_dens_coeff, theta_0, gravity, &
+    r_d, c_p, L_v, p_surf, p_ref, pressure_scale_height,diffus,k_a,r_v,visc,sc
     use constants, only : zero, one, f13, f12, six, fpi, three, fpi6, f14, f32, f52,pi,two
     use timer, only : start_timer, stop_timer
     use parcel_ellipsoid
@@ -713,12 +714,12 @@
             slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
             vent_r = two*pi*(this%nr(n))*ro_air* &
                     (0.78*((one+mu)/(slope)) &
-                    +  0.31*((a1*ro_air/visc)**(f12))*(Sc**(f13))*((rho_ref/ro_air)**(f14))  &
+                    +  0.31*((a1*ro_air/visc)**(f12))*(sc**(f13))*((rho_ref/ro_air)**(f14))  &
                     * (gamma((f12*b1 +mu +f52))/gamma((1+mu))) &
                     *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
                     *((slope)**(-f12*b1 -f32)))
             !Thermodynamic coefficient
-            abliq = 1/((l_v**2)/(k_a*r_v* (temp**2))) + (1/(ro_air*ws*diffus))
+            abliq = 1/((L_v**2)/(k_a*r_v* (temp**2))) + (1/(ro_air*ws*diffus))
             !Evaporation rate!
             this%dmass(n) = (1-this%qv(n)/ws)*vent_r*abliq
         end do

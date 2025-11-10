@@ -276,10 +276,12 @@ module prec_parcel_interpl
         ! Interpolate the gridded quantities to the parcels without resetting
         ! their values to zero before doing grid2par.
         ! @param[inout] vel is the parcel velocity
-        subroutine prec_grid2par_add(vel)
+        subroutine prec_grid2par_add(vel,theta,qv)
             double precision,       intent(inout) :: vel(:, :)
+            double precision,       intent(inout) :: theta(:)
+            double precision,       intent(inout) :: qv(:)
 
-            call prec_grid2par(vel, add=.true.)
+            call prec_grid2par(vel,theta,qv, add=.true.)
 
         end subroutine prec_grid2par_add
 
