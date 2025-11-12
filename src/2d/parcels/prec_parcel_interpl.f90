@@ -40,7 +40,7 @@ module prec_parcel_interpl
         subroutine prec_par2grid(prec_parcels)
             class(prec_parcel_type), intent(in) :: prec_parcels
             double precision :: points(2)
-            integer          :: n, p, i, j
+            integer          :: n, i, j
             double precision :: pvol, btot
 
             call start_timer(prec_par2grid_timer)
@@ -53,8 +53,8 @@ module prec_parcel_interpl
             qvg = zero
             thetag = zero
             !$omp parallel default(shared)
-            !$omp do private(n, p, i, j, points, pvol, btot, is, js, weights) &
-            !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg,qvg,thetag)
+            !$omp do private(n, i, j, points, pvol, btot, is, js, weights) &
+            !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg)
             do n = 1, n_prec_parcels
                 pvol = prec_parcels%volume(n)
 
@@ -78,12 +78,8 @@ module prec_parcel_interpl
                     prec_tbuoyg(js:js+1, is:is+1) = prec_tbuoyg(js:js+1, is:is+1) &
                                          + weights * btot
                 endif
-                if (microphysics%l_evaporation) then
-                    qvg(js:js+1, is:is+1) = qvg(js:js+1, is:is+1) &
-                                         + weights * prec_parcels%qv(n)
-                    thetag(js:js+1, is:is+1) = thetag(js:js+1, is:is+1) &
-                                         + weights * prec_parcels%theta(n)
-                endif
+
+                
                 prec_volg(js:js+1, is:is+1) = prec_volg(js:js+1, is:is+1) &
                                    + weights
                 qrg(js:js+1, is:is+1) = qrg(js:js+1, is:is+1) &
@@ -216,7 +212,7 @@ module prec_parcel_interpl
             double precision,     intent(inout) :: qv(:)
             logical, optional, intent(in)       :: add
             double precision                    :: points(2)
-            integer                             :: n, p, l
+            integer                             :: n, l
 
             call start_timer(prec_grid2par_timer)
 

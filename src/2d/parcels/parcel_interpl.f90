@@ -39,13 +39,13 @@ module parcel_interpl
         ! Interpolate the parcel volume to the grid
         subroutine vol2grid
             double precision  :: points(2, 2)
-            integer           :: n, p, l
+            integer           :: n, p
             double precision  :: pvol
 
             volg = zero
 
             !$omp parallel default(shared)
-            !$omp do private(n, p, l, points, pvol, is, js, weights) &
+            !$omp do private(n, p,  points, pvol, is, js, weights) &
             !$omp& reduction(+: volg)
             do n = 1, n_parcels
                 pvol = parcels%volume(n)
@@ -90,7 +90,7 @@ module parcel_interpl
         ! Interpolate the parcel volume to the grid to check symmetry
         subroutine vol2grid_symmetry_error
             double precision :: points(2, 2), V, B(2), pos(2)
-            integer          :: n, p, l, m
+            integer          :: n, p,  m
             double precision :: pvol
 
             call start_timer(sym_vol2grid_timer)
@@ -99,7 +99,7 @@ module parcel_interpl
 
             do m = -1, 1, 2
                 !$omp parallel default(shared)
-                !$omp do private(n, p, l, points, pos, pvol, V, B, is, js, weights) &
+                !$omp do private(n, p,  points, pos, pvol, V, B, is, js, weights) &
                 !$omp& reduction(+: sym_volg)
                 do n = 1, n_parcels
 

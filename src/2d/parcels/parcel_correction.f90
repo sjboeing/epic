@@ -142,7 +142,7 @@ module parcel_correction
         double precision :: phi(0:nz,0:nx-1), ud(-1:nz+1,-1:nx), wd(-1:nz+1,-1:nx)
         double precision :: wbar(0:nz)
         double precision :: weights(0:1, 0:1)
-        integer          :: n, l, is, js
+        integer          :: n, is, js
 
         call start_timer(lapl_corr_timer)
 
@@ -191,7 +191,7 @@ module parcel_correction
         !------------------------------------------------------------------
         ! Increment parcel positions usind (ud,wd) field:
         !$omp parallel default(shared)
-        !$omp do private(n, l, is, js, weights)
+        !$omp do private(n, is, js, weights)
         do n = 1, n_parcels
             call bilinear(parcels%position(:, n), is, js, weights)
 
