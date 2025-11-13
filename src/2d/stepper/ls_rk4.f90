@@ -56,19 +56,15 @@ module ls_rk4
             type is (idealised_parcel_type)
                 call par2grid_idealised(parcels)
             type is (realistic_parcel_type)
-                print *, "theta parcel going into par2grid_realistic is ", parcels%theta(1)
-                print *, "theta grid going into par2grid_realistic is ", thetag(1,1)
+                
                 call par2grid_realistic(parcels)
-                print *, "theta parcel going out of par2grid_realistic is ", parcels%theta(1)
-                print *, "theta grid going out of par2grid_realistic is ", thetag(1,1)
+                
             end select
 
             if(microphysics%l_precipitation) then
-                !print *, "theta parcel going into prec_par2grid is ", parcels%theta(1)
-                print *, "theta grid going into prec_par2grid is ", thetag(1,1)
+                
                 call prec_par2grid(prec_parcels)
-                !print *, "theta parcel going into prec_par2grid is ", parcels%theta(1)
-                print *, "theta grid going out of prec_par2grid is ", thetag(1,1)
+              
             
             end if
 
@@ -88,9 +84,7 @@ module ls_rk4
             call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain)
             if(microphysics%l_precipitation) then
                 call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
-                print *, "number of precipitation parcels at time ", t, " is ", n_prec_parcels
-                print *, "theta of first precip parcel: ", prec_parcels%theta(1)
-                print *, "qv of first precip parcel: ", prec_parcels%qv(1)
+
                 if(microphysics%l_sedimentation) then
                     prec_parcels%local_num = n_prec_parcels
                     call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
@@ -116,7 +110,7 @@ module ls_rk4
                 type is (realistic_parcel_type)
                     call par2grid_realistic(parcels)
                 end select
-
+               
                 if(microphysics%l_precipitation) then
                     call prec_par2grid(prec_parcels)
                     if(microphysics%l_sedimentation) then
@@ -139,6 +133,11 @@ module ls_rk4
             ! the timer multiple times which increments n_calls
             timings(rk4_timer)%n_calls =  timings(rk4_timer)%n_calls - 14
 
+            print *, " At time t = ", t + dt, &
+            "Prec parcel attributes qr and nr",&
+             prec_parcels%qr(1:n_prec_parcels), prec_parcels%nr(1:n_prec_parcels),&
+             "dmass and dnumber",& 
+             prec_parcels%dmass(1:n_prec_parcels), prec_parcels%dnumber(1:n_prec_parcels)
             t = t + dt
         end subroutine ls_rk4_step
 
@@ -215,6 +214,7 @@ module ls_rk4
                                     + cb * dt * prec_parcels%dnumber(n)
                 enddo
                 !$omp end parallel do
+               
                 prec_parcels%local_num = n_prec_parcels
                 call prec_parcels%goners
                 n_prec_parcels = prec_parcels%local_num

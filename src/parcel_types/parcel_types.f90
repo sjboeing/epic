@@ -692,6 +692,8 @@
         else
             !$omp parallel do default(shared) private(n,slope,asr1,asr2, vterm)
             do n = 1, this%local_num
+                
+                
                 slope = (fpi6*(rho_w/rho_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
                 !These are the mass weighted integrals for abel and shipway terminal velocity
                 asr1 = a1*((rho_ref/rho_air)**(f12))*(slope**(one+mu+three)*(slope+f1)**(-(one+mu+three+b1))) &
@@ -708,7 +710,7 @@
 
     subroutine evaporation(this)
         class(prec_parcel_type), intent(inout) :: this
-        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press
+        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press, evap_rate
         integer :: n
         
         !$omp parallel do default(shared) private(n,exn,temp,ro_air,slope,vent_r,abliq,ws,press)
@@ -716,7 +718,6 @@
             
             press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
             exn = (press/p_ref)**(r_d/c_p)
-            print *, "Prec Parcel ", n, " theta: ", this%theta(n), " qv: ", this%qv(n), " qr: ", this%qr(n)
             temp = this%theta(n)*exn
             ro_air = press/(r_d*temp)
             ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
@@ -728,11 +729,14 @@
                     *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
                     *((slope)**(-f12*b1 -f32)))
             !Thermodynamic coefficient
-            abliq = 1/((L_v**2)/(k_a*r_v* (temp**2))) + (1/(ro_air*ws*diffus))
+            !abliq = 1/((L_v**2)/(k_a*r_v* (temp**2))) + (1/(ro_air*ws*diffus))
+            abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
             !Evaporation rate!
-            this%dmass(n) = -(1-this%qv(n)/ws)*vent_r*abliq
-            this%dnumber(n) = this%dmass(n)*(((this%nr(n))/ro_air)/(this%qr(n)))
-
+            evap_rate = (1.0-this%qv(n)/ws)*vent_r*abliq
+            
+            this%dmass(n) = -evap_rate
+            this%dnumber(n) =0.0
+            
         end do
         !$omp end parallel do
         

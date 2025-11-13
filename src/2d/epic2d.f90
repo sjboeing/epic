@@ -102,7 +102,7 @@ program epic2d
             call init_parcel_correction
 
             call field_default
-
+            
             call setup_output_files
 
         end subroutine

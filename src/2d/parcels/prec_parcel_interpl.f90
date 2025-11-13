@@ -42,8 +42,6 @@ module prec_parcel_interpl
             double precision :: points(2)
             integer          :: n, i, j
             double precision :: pvol, btot
-            double precision :: thetag_tmp(-1:nz+1, -1:nx)
-            double precision :: qvg_tmp(-1:nz+1, -1:nx)
             call start_timer(prec_par2grid_timer)
 
             prec_volg = zero
@@ -51,11 +49,12 @@ module prec_parcel_interpl
             prec_tbuoyg = zero
             qrg = zero
             Nrg = zero
-            thetag_tmp = zero
-            qvg_tmp = zero
+            
+
+            
             !$omp parallel default(shared)
             !$omp do private(n, i, j, points, pvol, btot, is, js, weights) &
-            !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg,thetag_tmp,qvg_tmp)
+            !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg)
             do n = 1, n_prec_parcels
                 pvol = prec_parcels%volume(n)
 
@@ -87,19 +86,15 @@ module prec_parcel_interpl
                                    + weights * prec_parcels%qr(n)
                 Nrg(js:js+1, is:is+1) = Nrg(js:js+1, is:is+1) &
                                    + weights * prec_parcels%Nr(n)
-                qvg_tmp(js:js+1, is:is+1) = qvg_tmp(js:js+1, is:is+1) &
-                                      + weights * prec_parcels%qv(n)
-                thetag_tmp(js:js+1, is:is+1) = thetag_tmp(js:js+1, is:is+1) &
-                                      + weights * prec_parcels%theta(n)
+                ! qvg(js:js+1, is:is+1) = qvg(js:js+1, is:is+1) &
+                !                       + weights * prec_parcels%qv(n)
+                ! thetag(js:js+1, is:is+1) = thetag(js:js+1, is:is+1) &
+                !                       + weights * prec_parcels%theta(n)
 
             enddo
             !$omp end do
             !$omp end parallel
-            print *, "thetag_tmp  =", thetag_tmp(1,1)
-            print *, "thetag  =", thetag(1,1)
-            thetag = thetag+thetag_tmp
-            print *, "thetag after sum =", thetag(1,1)
-            qvg = qvg+qvg_tmp
+            
             ! apply periodicity
             prec_volg(:, 0)    = prec_volg(:, 0) + prec_volg(:, nx)
             prec_volg(:, nx-1) = prec_volg(:, nx-1) + prec_volg(:, -1)
@@ -260,17 +255,15 @@ module prec_parcel_interpl
 
                 ! get interpolation weights and mesh indices
                 call bilinear(points(:), is, js, weights)
-
+                
                 do l = 1,2
                     vel(l, n) = vel(l, n) &
                               + sum(weights * velog(js:js+1, is:is+1, l))
                 end do
-                print *, "theta grid" , thetag(js:js+1, is:is+1)
-                print *, "qv grid" , qvg(js:js+1, is:is+1)
-                theta(n) = theta(n) &
-                              + sum(weights * thetag(js:js+1, is:is+1))
-                qv(n)    = qv(n) &
-                              + sum(weights * qvg(js:js+1, is:is+1))
+                
+                theta(n) = sum(weights * thetag(js:js+1, is:is+1))
+                 
+                qv(n)   = sum(weights * qvg(js:js+1, is:is+1))
             enddo
             !$omp end do
             !$omp end parallel

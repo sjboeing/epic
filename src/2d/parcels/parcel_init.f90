@@ -320,8 +320,9 @@ module parcel_init
                 buffer = zero
                 call read_netcdf_dataset(ncid, 'theta', buffer(0:nz, :), start=start, cnt=cnt)
                 call gen_parcel_scalar_attr(buffer, tol, parcels%theta)
-            endif
 
+            endif
+            
             if (has_dataset(ncid, 'qv')) then
                 buffer = zero
                 call read_netcdf_dataset(ncid, 'qv', buffer(0:nz, :), start=start, cnt=cnt)
@@ -332,6 +333,7 @@ module parcel_init
                 buffer = zero
                 call read_netcdf_dataset(ncid, 'ql', buffer(0:nz, :), start=start, cnt=cnt)
                 call gen_parcel_scalar_attr(buffer, tol, parcels%ql)
+                
             endif
 
             if (has_dataset(ncid, 'Nl')) then
