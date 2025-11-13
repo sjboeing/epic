@@ -42,7 +42,8 @@ module prec_parcel_interpl
             double precision :: points(2)
             integer          :: n, i, j
             double precision :: pvol, btot
-
+            double precision :: thetag_tmp(-1:nz+1, -1:nx)
+            double precision :: qvg_tmp(-1:nz+1, -1:nx)
             call start_timer(prec_par2grid_timer)
 
             prec_volg = zero
@@ -50,18 +51,18 @@ module prec_parcel_interpl
             prec_tbuoyg = zero
             qrg = zero
             Nrg = zero
-            qvg = zero
-            thetag = zero
+            thetag_tmp = zero
+            qvg_tmp = zero
             !$omp parallel default(shared)
             !$omp do private(n, i, j, points, pvol, btot, is, js, weights) &
-            !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg)
+            !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg,thetag_tmp,qvg_tmp)
             do n = 1, n_prec_parcels
                 pvol = prec_parcels%volume(n)
 
                 call prec_parcels%get_buoyancy(n, btot)
-
+                
                 points = prec_parcels%position(:, n)
-
+                
                 call get_index(prec_parcels%position(:, n), i, j)
                 i = mod(i + nx, nx)
                 prec_nparg(j, i) = prec_nparg(j, i) + 1
@@ -73,7 +74,7 @@ module prec_parcel_interpl
                 call bilinear(points(:), is, js, weights)
 
                 weights = weights*pvol
-
+               
                 if(microphysics%l_loading) then
                     prec_tbuoyg(js:js+1, is:is+1) = prec_tbuoyg(js:js+1, is:is+1) &
                                          + weights * btot
@@ -86,10 +87,19 @@ module prec_parcel_interpl
                                    + weights * prec_parcels%qr(n)
                 Nrg(js:js+1, is:is+1) = Nrg(js:js+1, is:is+1) &
                                    + weights * prec_parcels%Nr(n)
+                qvg_tmp(js:js+1, is:is+1) = qvg_tmp(js:js+1, is:is+1) &
+                                      + weights * prec_parcels%qv(n)
+                thetag_tmp(js:js+1, is:is+1) = thetag_tmp(js:js+1, is:is+1) &
+                                      + weights * prec_parcels%theta(n)
+
             enddo
             !$omp end do
             !$omp end parallel
-
+            print *, "thetag_tmp  =", thetag_tmp(1,1)
+            print *, "thetag  =", thetag(1,1)
+            thetag = thetag+thetag_tmp
+            print *, "thetag after sum =", thetag(1,1)
+            qvg = qvg+qvg_tmp
             ! apply periodicity
             prec_volg(:, 0)    = prec_volg(:, 0) + prec_volg(:, nx)
             prec_volg(:, nx-1) = prec_volg(:, nx-1) + prec_volg(:, -1)
@@ -114,15 +124,15 @@ module prec_parcel_interpl
             Nrg(:, -1)   = Nrg(:, nx-1)
             Nrg(:, nx)   = Nrg(:, 0)
 
-            qvg(:, 0)    = qvg(:, 0) + qvg(:, nx)
-            qvg(:, nx-1) = qvg(:, nx-1) + qvg(:, -1)
-            qvg(:, -1)   = qvg(:, nx-1)
-            qvg(:, nx)   = qvg(:, 0)    
+            ! qvg(:, 0)    = qvg(:, 0) + qvg(:, nx)
+            ! qvg(:, nx-1) = qvg(:, nx-1) + qvg(:, -1)
+            ! qvg(:, -1)   = qvg(:, nx-1)
+            ! qvg(:, nx)   = qvg(:, 0)    
 
-            thetag(:, 0)    = thetag(:, 0) + thetag(:, nx)
-            thetag(:, nx-1) = thetag(:, nx-1) + thetag(:, -1)
-            thetag(:, -1)   = thetag(:, nx-1)
-            thetag(:, nx)   = thetag(:, 0)
+            ! thetag(:, 0)    = thetag(:, 0) + thetag(:, nx)
+            ! thetag(:, nx-1) = thetag(:, nx-1) + thetag(:, -1)
+            ! thetag(:, -1)   = thetag(:, nx-1)
+            ! thetag(:, nx)   = thetag(:, 0)
 
             ! apply free slip boundary condition
             prec_volg(0,  :) = two * prec_volg(0,  :)
@@ -163,25 +173,25 @@ module prec_parcel_interpl
             Nrg(-1,   :) = two * Nrg(0,  :) - Nrg(1, :)
             Nrg(nz+1, :) = two * Nrg(nz, :) - Nrg(nz-1, :)
 
-            qvg(0,  :) = two * qvg(0,  :)
-            qvg(nz, :) = two * qvg(nz, :)
-            qvg(1,    :) = qvg(1,    :) + qvg(-1,   :)
-            qvg(nz-1, :) = qvg(nz-1, :) + qvg(nz+1, :)
-            qvg(0:nz, :) = qvg(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
-            ! extrapolate to halo grid points (needed to compute
-            ! z derivative used for the time step)
-            qvg(-1,   :) = two * qvg(0,  :) - qvg(1, :)
-            qvg(nz+1, :) = two * qvg(nz, :) - qvg(nz-1, :)
+            ! qvg(0,  :) = two * qvg(0,  :)
+            ! qvg(nz, :) = two * qvg(nz, :)
+            ! qvg(1,    :) = qvg(1,    :) + qvg(-1,   :)
+            ! qvg(nz-1, :) = qvg(nz-1, :) + qvg(nz+1, :)
+            ! qvg(0:nz, :) = qvg(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
+            ! ! extrapolate to halo grid points (needed to compute
+            ! ! z derivative used for the time step)
+            ! qvg(-1,   :) = two * qvg(0,  :) - qvg(1, :)
+            ! qvg(nz+1, :) = two * qvg(nz, :) - qvg(nz-1, :)
 
-            thetag(0,  :) = two * thetag(0,  :)
-            thetag(nz, :) = two * thetag(nz, :)
-            thetag(1,    :) = thetag(1,    :) + thetag(-1,   :)
-            thetag(nz-1, :) = thetag(nz-1, :) + thetag(nz+1, :)
-            thetag(0:nz, :) = thetag(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
-            ! extrapolate to halo grid points (needed to compute
-            ! z derivative used for the time step)
-            thetag(-1,   :) = two * thetag(0,  :) - thetag(1, :)
-            thetag(nz+1, :) = two * thetag(nz, :) - thetag(nz-1, :)
+            ! thetag(0,  :) = two * thetag(0,  :)
+            ! thetag(nz, :) = two * thetag(nz, :)
+            ! thetag(1,    :) = thetag(1,    :) + thetag(-1,   :)
+            ! thetag(nz-1, :) = thetag(nz-1, :) + thetag(nz+1, :)
+            ! thetag(0:nz, :) = thetag(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
+            ! ! extrapolate to halo grid points (needed to compute
+            ! ! z derivative used for the time step)
+            ! thetag(-1,   :) = two * thetag(0,  :) - thetag(1, :)
+            ! thetag(nz+1, :) = two * thetag(nz, :) - thetag(nz-1, :)
 
             ! sum halo contribution into internal cells
             ! (be aware that halo cell contribution at upper boundary
@@ -255,7 +265,8 @@ module prec_parcel_interpl
                     vel(l, n) = vel(l, n) &
                               + sum(weights * velog(js:js+1, is:is+1, l))
                 end do
-                
+                print *, "theta grid" , thetag(js:js+1, is:is+1)
+                print *, "qv grid" , qvg(js:js+1, is:is+1)
                 theta(n) = theta(n) &
                               + sum(weights * thetag(js:js+1, is:is+1))
                 qv(n)    = qv(n) &

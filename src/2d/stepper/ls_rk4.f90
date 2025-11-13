@@ -12,7 +12,7 @@ module ls_rk4
     use utils, only : write_step
     use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add
     use prec_parcel_interpl, only : prec_par2grid, prec_grid2par, prec_grid2par_add
-    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg
+    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg,thetag, qvg
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_diagnostics, only : calculate_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
@@ -51,16 +51,25 @@ module ls_rk4
             double precision, intent(inout) :: t
             double precision                :: dt
             integer                         :: n
-
+            
             select type (parcels)
             type is (idealised_parcel_type)
                 call par2grid_idealised(parcels)
             type is (realistic_parcel_type)
+                print *, "theta parcel going into par2grid_realistic is ", parcels%theta(1)
+                print *, "theta grid going into par2grid_realistic is ", thetag(1,1)
                 call par2grid_realistic(parcels)
+                print *, "theta parcel going out of par2grid_realistic is ", parcels%theta(1)
+                print *, "theta grid going out of par2grid_realistic is ", thetag(1,1)
             end select
 
             if(microphysics%l_precipitation) then
+                !print *, "theta parcel going into prec_par2grid is ", parcels%theta(1)
+                print *, "theta grid going into prec_par2grid is ", thetag(1,1)
                 call prec_par2grid(prec_parcels)
+                !print *, "theta parcel going into prec_par2grid is ", parcels%theta(1)
+                print *, "theta grid going out of prec_par2grid is ", thetag(1,1)
+            
             end if
 
             ! need to be called in order to set initial time step;
@@ -77,9 +86,11 @@ module ls_rk4
             dt = get_time_step(t)
 
             call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain)
-
             if(microphysics%l_precipitation) then
                 call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
+                print *, "number of precipitation parcels at time ", t, " is ", n_prec_parcels
+                print *, "theta of first precip parcel: ", prec_parcels%theta(1)
+                print *, "qv of first precip parcel: ", prec_parcels%qv(1)
                 if(microphysics%l_sedimentation) then
                     prec_parcels%local_num = n_prec_parcels
                     call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
@@ -93,7 +104,7 @@ module ls_rk4
             call calculate_parcel_diagnostics(parcels%delta_pos)
 
             call calculate_field_diagnostics
-
+            
             call write_step(t)
 
             do n = 1, 4
@@ -198,6 +209,10 @@ module ls_rk4
                 do n = 1, n_prec_parcels
                     prec_parcels%position(:, n) = prec_parcels%position(:, n) &
                                           + cb * dt * prec_parcels%delta_pos(:, n)
+                    prec_parcels%qr(n) = prec_parcels%qr(n) &
+                                    + cb * dt * prec_parcels%dmass(n)
+                    prec_parcels%nr(n) = prec_parcels%nr(n) &
+                                    + cb * dt * prec_parcels%dnumber(n)
                 enddo
                 !$omp end parallel do
                 prec_parcels%local_num = n_prec_parcels
@@ -226,6 +241,8 @@ module ls_rk4
                 !$omp parallel do default(shared) private(n)
                 do n = 1, n_prec_parcels
                     prec_parcels%delta_pos(:, n) = ca * prec_parcels%delta_pos(:, n)
+                    prec_parcels%dmass(n) = ca * prec_parcels%dmass(n)
+                    prec_parcels%dnumber(n) = ca * prec_parcels%dnumber(n)
                 enddo
                 !$omp end parallel do
             end if

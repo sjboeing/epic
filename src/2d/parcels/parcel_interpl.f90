@@ -118,10 +118,11 @@ module parcel_interpl
 
                         ! ensure point is within the domain
                         call apply_periodic_bc(points(:, p))
-
+                        
                         ! get interpolation weights and mesh indices
                         call bilinear(points(:, p), is, js, weights)
-
+                        
+                        
                         sym_volg(js:js+1, is:is+1) = sym_volg(js:js+1, is:is+1) &
                                                + f12 * weights * pvol
                     enddo
