@@ -88,8 +88,8 @@ module prec_parcel_interpl
                                    + weights * prec_parcels%Nr(n)
                 ! qvg(js:js+1, is:is+1) = qvg(js:js+1, is:is+1) &
                 !                       + weights * prec_parcels%qv(n)
-                ! thetag(js:js+1, is:is+1) = thetag(js:js+1, is:is+1) &
-                !                       + weights * prec_parcels%theta(n)
+                thetag(js:js+1, is:is+1) = thetag(js:js+1, is:is+1) &
+                                      + weights * prec_parcels%latent_heat(n)
 
             enddo
             !$omp end do

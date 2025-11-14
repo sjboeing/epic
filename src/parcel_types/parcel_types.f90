@@ -87,7 +87,7 @@
         double precision, allocatable, dimension(:) :: dnumber ! evaporation droplet number change rate
         double precision, allocatable, dimension(:) :: qv ! for evaporation calculations
         double precision, allocatable, dimension(:) :: theta ! for evaporation calculations 
-
+        double precision, allocatable, dimension(:) :: latent_heat ! latent heat content of parcel  
         contains
             procedure :: alloc => prec_parcel_alloc
             procedure :: dealloc => prec_parcel_dealloc
@@ -238,6 +238,7 @@
             allocate(this%dnumber(num))
             allocate(this%qv(num))
             allocate(this%theta(num))
+            allocate(this%latent_heat(num))
 
             call this%register_attribute(this%volume, "volume", "m^3")
             call this%register_attribute(this%qr, "qr", "kg/kg")
@@ -246,6 +247,7 @@
             call this%register_attribute(this%dnumber, "dnumber", "/s")
             call this%register_attribute(this%qv, "qv", "kg/kg")
             call this%register_attribute(this%theta, "theta", "K")
+            call this%register_attribute(this%latent_heat, "latent_heat", "J")
 
         end subroutine prec_parcel_alloc
 
@@ -261,6 +263,7 @@
             call try_deallocate(this%dnumber)
             call try_deallocate(this%qv)
             call try_deallocate(this%theta)
+            call try_deallocate(this%latent_heat)
 
             call this%base_dealloc
 
@@ -281,6 +284,7 @@
             call resize_array(this%dnumber, new_size, this%local_num)
             call resize_array(this%qv, new_size, this%local_num)
             call resize_array(this%theta, new_size, this%local_num)
+            call resize_array(this%latent_heat, new_size, this%local_num)
 
             call this%reset_attribute(this%volume, "volume")
             call this%reset_attribute(this%qr, "qr")
@@ -289,6 +293,7 @@
             call this%reset_attribute(this%dnumber, "dnumber")
             call this%reset_attribute(this%qv, "qv")
             call this%reset_attribute(this%theta, "theta")
+            call this%reset_attribute(this%latent_heat, "latent_heat")
 
         end subroutine prec_parcel_resize
 
@@ -721,6 +726,8 @@
             temp = this%theta(n)*exn
             ro_air = press/(r_d*temp)
             ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
+            print *, "press,exn,temp,ro_air,ws=",press,exn,temp,ro_air,ws
+
             slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
             vent_r = two*pi*(this%nr(n))*ro_air* &
                     (0.78*((one+mu)/(slope)) &
@@ -736,6 +743,7 @@
             
             this%dmass(n) = -evap_rate
             this%dnumber(n) =0.0
+            this%latent_heat(n) = ((L_v/c_p)/exn)*(-evap_rate)
             
         end do
         !$omp end parallel do

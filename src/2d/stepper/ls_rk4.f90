@@ -12,7 +12,7 @@ module ls_rk4
     use utils, only : write_step
     use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add
     use prec_parcel_interpl, only : prec_par2grid, prec_grid2par, prec_grid2par_add
-    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg,thetag, qvg
+    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_diagnostics, only : calculate_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
@@ -133,11 +133,11 @@ module ls_rk4
             ! the timer multiple times which increments n_calls
             timings(rk4_timer)%n_calls =  timings(rk4_timer)%n_calls - 14
 
-            print *, " At time t = ", t + dt, &
-            "Prec parcel attributes qr and nr",&
-             prec_parcels%qr(1:n_prec_parcels), prec_parcels%nr(1:n_prec_parcels),&
-             "dmass and dnumber",& 
-             prec_parcels%dmass(1:n_prec_parcels), prec_parcels%dnumber(1:n_prec_parcels)
+            ! print *, " At time t = ", t + dt, &
+            ! "Prec parcel attributes qr and nr",&
+            !  prec_parcels%qr(1:n_prec_parcels), prec_parcels%nr(1:n_prec_parcels),&
+            !  "dmass and dnumber",& 
+            !  prec_parcels%dmass(1:n_prec_parcels), prec_parcels%dnumber(1:n_prec_parcels)
             t = t + dt
         end subroutine ls_rk4_step
 
@@ -212,6 +212,7 @@ module ls_rk4
                                     + cb * dt * prec_parcels%dmass(n)
                     prec_parcels%nr(n) = prec_parcels%nr(n) &
                                     + cb * dt * prec_parcels%dnumber(n)
+                    prec_parcels%latent_heat(n) =  dt * prec_parcels%latent_heat(n)
                 enddo
                 !$omp end parallel do
                
@@ -222,7 +223,7 @@ module ls_rk4
 
             call stop_timer(rk4_timer)
             call parcels%saturation_adjustment
-
+            print *, "Step is ", step, " latent heat is ", prec_parcels%latent_heat(1:n_prec_parcels)
             if (step == 5) then
                return
             endif
