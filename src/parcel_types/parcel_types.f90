@@ -724,10 +724,11 @@
             press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
             exn = (press/p_ref)**(r_d/c_p)
             temp = this%theta(n)*exn
+            if (n==1) then 
+                print *, "Evaporation theta: ", this%theta(n) 
+            end if
             ro_air = press/(r_d*temp)
             ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
-            print *, "press,exn,temp,ro_air,ws=",press,exn,temp,ro_air,ws
-
             slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
             vent_r = two*pi*(this%nr(n))*ro_air* &
                     (0.78*((one+mu)/(slope)) &
@@ -735,10 +736,9 @@
                     * (gamma((f12*b1 +mu +f52))/gamma((1+mu))) &
                     *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
                     *((slope)**(-f12*b1 -f32)))
-            !Thermodynamic coefficient
-            !abliq = 1/((L_v**2)/(k_a*r_v* (temp**2))) + (1/(ro_air*ws*diffus))
+            
             abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
-            !Evaporation rate!
+            
             evap_rate = (1.0-this%qv(n)/ws)*vent_r*abliq
             
             this%dmass(n) = -evap_rate

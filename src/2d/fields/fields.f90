@@ -30,6 +30,7 @@ module fields
         Nlg,    &      ! droplet number
         prec_tbuoyg, & ! buoyancy from precip
         prec_volg,   & ! volume from precip
+        prec_thetag, & ! potential temperature from precip
         qrg,         & ! mixing ratio (rain)
         Nrg,         & ! rain droplet number
 #ifndef NDEBUG
@@ -113,6 +114,7 @@ module fields
             allocate(Nrg(-1:nz+1, -1:nx))
             allocate(prec_volg(-1:nz+1, -1:nx))
             allocate(prec_tbuoyg(-1:nz+1, -1:nx))
+            allocate(prec_thetag(-1:nz+1, -1:nx))
             allocate(prec_nparg(-1:nz+1, -1:nx))
 
         end subroutine prec_field_alloc
@@ -138,6 +140,7 @@ module fields
                 Nrg = zero
                 prec_volg = zero
                 prec_tbuoyg = zero
+                prec_thetag = zero
                 prec_nparg = zero
             endif
 

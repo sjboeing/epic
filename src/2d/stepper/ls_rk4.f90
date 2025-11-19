@@ -12,7 +12,7 @@ module ls_rk4
     use utils, only : write_step
     use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add
     use prec_parcel_interpl, only : prec_par2grid, prec_grid2par, prec_grid2par_add
-    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg
+    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag, prec_thetag
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_diagnostics, only : calculate_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
@@ -51,7 +51,6 @@ module ls_rk4
             double precision, intent(inout) :: t
             double precision                :: dt
             integer                         :: n
-            
             select type (parcels)
             type is (idealised_parcel_type)
                 call par2grid_idealised(parcels)
@@ -62,10 +61,8 @@ module ls_rk4
             end select
 
             if(microphysics%l_precipitation) then
-                
                 call prec_par2grid(prec_parcels)
-              
-            
+                thetag = thetag + prec_thetag
             end if
 
             ! need to be called in order to set initial time step;
@@ -80,9 +77,11 @@ module ls_rk4
 
             ! update the time step
             dt = get_time_step(t)
-
-            call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain)
-            if(microphysics%l_precipitation) then
+            select type (parcels)
+            type is (realistic_parcel_type)
+                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%theta)
+            end select
+                if(microphysics%l_precipitation) then
                 call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
 
                 if(microphysics%l_sedimentation) then
@@ -113,6 +112,7 @@ module ls_rk4
                
                 if(microphysics%l_precipitation) then
                     call prec_par2grid(prec_parcels)
+                    thetag = thetag + prec_thetag
                     if(microphysics%l_sedimentation) then
                         prec_parcels%local_num = n_prec_parcels
                         call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
@@ -133,11 +133,7 @@ module ls_rk4
             ! the timer multiple times which increments n_calls
             timings(rk4_timer)%n_calls =  timings(rk4_timer)%n_calls - 14
 
-            ! print *, " At time t = ", t + dt, &
-            ! "Prec parcel attributes qr and nr",&
-            !  prec_parcels%qr(1:n_prec_parcels), prec_parcels%nr(1:n_prec_parcels),&
-            !  "dmass and dnumber",& 
-            !  prec_parcels%dmass(1:n_prec_parcels), prec_parcels%dnumber(1:n_prec_parcels)
+            print *, 'Completed ls-RK4 step at time ', t+dt, ' with dt = ', dt
             t = t + dt
         end subroutine ls_rk4_step
 
@@ -172,9 +168,10 @@ module ls_rk4
                 else
                     call vorticity_tendency(tbuoyg, vtend)
                 endif
-
-                call grid2par_add(parcels%delta_pos, parcels%delta_vor, parcels%strain)
-
+                select type (parcels)
+                type is (realistic_parcel_type)
+                call grid2par_add(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%theta)
+                end select
                 if(microphysics%l_precipitation) then
                     call prec_grid2par_add(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
                 endif
@@ -212,7 +209,8 @@ module ls_rk4
                                     + cb * dt * prec_parcels%dmass(n)
                     prec_parcels%nr(n) = prec_parcels%nr(n) &
                                     + cb * dt * prec_parcels%dnumber(n)
-                    prec_parcels%latent_heat(n) =  dt * prec_parcels%latent_heat(n)
+                    prec_parcels%latent_heat(n) =  prec_parcels%latent_heat(n)&
+                                    + cb*dt * prec_parcels%latent_heat(n)
                 enddo
                 !$omp end parallel do
                
@@ -223,7 +221,6 @@ module ls_rk4
 
             call stop_timer(rk4_timer)
             call parcels%saturation_adjustment
-            print *, "Step is ", step, " latent heat is ", prec_parcels%latent_heat(1:n_prec_parcels)
             if (step == 5) then
                return
             endif

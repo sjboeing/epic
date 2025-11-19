@@ -42,18 +42,20 @@ module prec_parcel_interpl
             double precision :: points(2)
             integer          :: n, i, j
             double precision :: pvol, btot
+            double precision :: pvol_weights(0:1,0:1)
             call start_timer(prec_par2grid_timer)
 
             prec_volg = zero
             prec_nparg = zero
             prec_tbuoyg = zero
+            prec_thetag = zero
             qrg = zero
             Nrg = zero
             
 
             
             !$omp parallel default(shared)
-            !$omp do private(n, i, j, points, pvol, btot, is, js, weights) &
+            !$omp do private(n, i, j, points, pvol, btot, is, js, weights,pvol_weights) &
             !$omp& reduction(+:prec_nparg, qrg, Nrg, prec_tbuoyg, prec_volg)
             do n = 1, n_prec_parcels
                 pvol = prec_parcels%volume(n)
@@ -72,8 +74,8 @@ module prec_parcel_interpl
                 ! get interpolation weights and mesh indices
                 call bilinear(points(:), is, js, weights)
 
-                weights = weights*pvol
-               
+                pvol_weights = weights*pvol
+                
                 if(microphysics%l_loading) then
                     prec_tbuoyg(js:js+1, is:is+1) = prec_tbuoyg(js:js+1, is:is+1) &
                                          + weights * btot
@@ -88,9 +90,10 @@ module prec_parcel_interpl
                                    + weights * prec_parcels%Nr(n)
                 ! qvg(js:js+1, is:is+1) = qvg(js:js+1, is:is+1) &
                 !                       + weights * prec_parcels%qv(n)
-                thetag(js:js+1, is:is+1) = thetag(js:js+1, is:is+1) &
+                
+                prec_thetag(js:js+1, is:is+1) = prec_thetag(js:js+1, is:is+1) &
                                       + weights * prec_parcels%latent_heat(n)
-
+                
             enddo
             !$omp end do
             !$omp end parallel
@@ -124,10 +127,10 @@ module prec_parcel_interpl
             ! qvg(:, -1)   = qvg(:, nx-1)
             ! qvg(:, nx)   = qvg(:, 0)    
 
-            ! thetag(:, 0)    = thetag(:, 0) + thetag(:, nx)
-            ! thetag(:, nx-1) = thetag(:, nx-1) + thetag(:, -1)
-            ! thetag(:, -1)   = thetag(:, nx-1)
-            ! thetag(:, nx)   = thetag(:, 0)
+            prec_thetag(:, 0)    = prec_thetag(:, 0) + prec_thetag(:, nx)
+            prec_thetag(:, nx-1) = prec_thetag(:, nx-1) + prec_thetag(:, -1)
+            prec_thetag(:, -1)   = prec_thetag(:, nx-1)
+            prec_thetag(:, nx)   = prec_thetag(:, 0)
 
             ! apply free slip boundary condition
             prec_volg(0,  :) = two * prec_volg(0,  :)
@@ -177,17 +180,17 @@ module prec_parcel_interpl
             ! ! z derivative used for the time step)
             ! qvg(-1,   :) = two * qvg(0,  :) - qvg(1, :)
             ! qvg(nz+1, :) = two * qvg(nz, :) - qvg(nz-1, :)
-
-            ! thetag(0,  :) = two * thetag(0,  :)
-            ! thetag(nz, :) = two * thetag(nz, :)
-            ! thetag(1,    :) = thetag(1,    :) + thetag(-1,   :)
-            ! thetag(nz-1, :) = thetag(nz-1, :) + thetag(nz+1, :)
-            ! thetag(0:nz, :) = thetag(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
-            ! ! extrapolate to halo grid points (needed to compute
-            ! ! z derivative used for the time step)
-            ! thetag(-1,   :) = two * thetag(0,  :) - thetag(1, :)
-            ! thetag(nz+1, :) = two * thetag(nz, :) - thetag(nz-1, :)
-
+            if (n_prec_parcels /= 0) then
+                prec_thetag(0,  :) = two * prec_thetag(0,  :)
+                prec_thetag(nz, :) = two * prec_thetag(nz, :)
+                prec_thetag(1,    :) = prec_thetag(1,    :) + prec_thetag(-1,   :)
+                prec_thetag(nz-1, :) = prec_thetag(nz-1, :) + prec_thetag(nz+1, :)
+                prec_thetag(0:nz, :) = prec_thetag(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
+                ! extrapolate to halo grid points (needed to compute
+                ! z derivative used for the time step)
+                prec_thetag(-1,   :) = two * prec_thetag(0,  :) - prec_thetag(1, :)
+                prec_thetag(nz+1, :) = two * prec_thetag(nz, :) - prec_thetag(nz-1, :)
+            end if  
             ! sum halo contribution into internal cells
             ! (be aware that halo cell contribution at upper boundary
             ! are added to cell nz)
