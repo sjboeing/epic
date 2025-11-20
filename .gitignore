@@ -9,3 +9,4 @@ missing
 py-compile
 configure~
 src/Makefile.in
+results/
