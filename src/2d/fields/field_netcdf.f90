@@ -24,7 +24,8 @@ module field_netcdf
                            tbuo_id, n_writes
     integer             :: dbuo_id, hum_id
     integer             :: theta_id, qv_id, ql_id, Nl_id
-    integer             :: prec_vol_id, prec_tbuo_id, qr_id, Nr_id, prec_npar_id
+    integer             :: prec_vol_id, prec_tbuo_id, qr_id, Nr_id, prec_npar_id,&
+    prec_thetag_id,prec_qvg_id
 
 #ifdef ENABLE_DIAGNOSE
     integer             :: vol_id, npar_id
@@ -41,7 +42,8 @@ module field_netcdf
 
     private :: dbuo_id, hum_id
     private :: theta_id, qv_id, ql_id, Nl_id
-    private :: prec_vol_id, prec_tbuo_id, qr_id, Nr_id, prec_npar_id
+    private :: prec_vol_id, prec_tbuo_id, qr_id, Nr_id, prec_npar_id,prec_thetag_id,&
+    prec_qvg_id
 
 #ifdef ENABLE_DIAGNOSE
     private :: vol_id, npar_id
@@ -290,6 +292,23 @@ module field_netcdf
                            dtype=NF90_DOUBLE,                                &
                            dimids=dimids,                                    &
                            varid=prec_npar_id)
+
+                call define_netcdf_dataset(ncid=ncid,                        &  
+                            name='prec_theta',                                &
+                            long_name='potential temperature from precip',    &
+                            std_name='',                                      &
+                            unit='K',                                         &
+                            dtype=NF90_DOUBLE,                                &
+                            dimids=dimids,                                    &
+                            varid=prec_thetag_id)
+                call define_netcdf_dataset(ncid=ncid,                        &  
+                            name='prec_qv',                                   &
+                            long_name='water vapour mixing ratio from precip', &
+                            std_name='',                                      &
+                            unit='kg/kg',                                     &
+                            dtype=NF90_DOUBLE,                                &
+                            dimids=dimids,                                    &
+                            varid=prec_qvg_id)
             end if
 
             call close_definition(ncid)
@@ -401,6 +420,7 @@ module field_netcdf
             else
                 call write_netcdf_dataset(ncid, theta_id, thetag(0:nz, 0:nx-1), &
                                               start, cnt)
+                
                 if(parcels%is_moist) then
                     call write_netcdf_dataset(ncid, qv_id, qvg(0:nz, 0:nx-1), &
                                                   start, cnt)
@@ -426,6 +446,8 @@ module field_netcdf
             if(microphysics%l_precipitation) then
                 call write_netcdf_dataset(ncid, prec_vol_id, prec_volg(0:nz, 0:nx-1), start, cnt)
                 call write_netcdf_dataset(ncid, prec_tbuo_id, prec_tbuoyg(0:nz, 0:nx-1), start, cnt)
+                call write_netcdf_dataset(ncid, prec_thetag_id, prec_thetag(0:nz, 0:nx-1), start, cnt)
+                call write_netcdf_dataset(ncid, prec_qvg_id, prec_qvg(0:nz, 0:nx-1), start, cnt)
                 call write_netcdf_dataset(ncid, qr_id, qrg(0:nz, 0:nx-1), start, cnt)
                 call write_netcdf_dataset(ncid, Nr_id, Nrg(0:nz, 0:nx-1), start, cnt)
                 call write_netcdf_dataset(ncid, prec_npar_id, prec_nparg(0:nz, 0:nx-1), start, cnt)

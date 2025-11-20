@@ -49,6 +49,7 @@ module prec_parcel_interpl
             prec_nparg = zero
             prec_tbuoyg = zero
             prec_thetag = zero
+            prec_qvg = zero
             qrg = zero
             Nrg = zero
             
@@ -93,6 +94,8 @@ module prec_parcel_interpl
                 
                 prec_thetag(js:js+1, is:is+1) = prec_thetag(js:js+1, is:is+1) &
                                       + weights * prec_parcels%latent_heat(n)
+                prec_qvg(js:js+1, is:is+1) = prec_qvg(js:js+1, is:is+1) &
+                                      + weights * prec_parcels%evap_mass(n)
                 
             enddo
             !$omp end do
@@ -122,15 +125,16 @@ module prec_parcel_interpl
             Nrg(:, -1)   = Nrg(:, nx-1)
             Nrg(:, nx)   = Nrg(:, 0)
 
-            ! qvg(:, 0)    = qvg(:, 0) + qvg(:, nx)
-            ! qvg(:, nx-1) = qvg(:, nx-1) + qvg(:, -1)
-            ! qvg(:, -1)   = qvg(:, nx-1)
-            ! qvg(:, nx)   = qvg(:, 0)    
 
             prec_thetag(:, 0)    = prec_thetag(:, 0) + prec_thetag(:, nx)
             prec_thetag(:, nx-1) = prec_thetag(:, nx-1) + prec_thetag(:, -1)
             prec_thetag(:, -1)   = prec_thetag(:, nx-1)
             prec_thetag(:, nx)   = prec_thetag(:, 0)
+
+            prec_qvg(:, 0)    = prec_qvg(:, 0) + prec_qvg(:, nx)
+            prec_qvg(:, nx-1) = prec_qvg(:, nx-1) + prec_qvg(:, -1)
+            prec_qvg(:, -1)   = prec_qvg(:, nx-1)
+            prec_qvg(:, nx)   = prec_qvg(:, 0)
 
             ! apply free slip boundary condition
             prec_volg(0,  :) = two * prec_volg(0,  :)
@@ -171,15 +175,7 @@ module prec_parcel_interpl
             Nrg(-1,   :) = two * Nrg(0,  :) - Nrg(1, :)
             Nrg(nz+1, :) = two * Nrg(nz, :) - Nrg(nz-1, :)
 
-            ! qvg(0,  :) = two * qvg(0,  :)
-            ! qvg(nz, :) = two * qvg(nz, :)
-            ! qvg(1,    :) = qvg(1,    :) + qvg(-1,   :)
-            ! qvg(nz-1, :) = qvg(nz-1, :) + qvg(nz+1, :)
-            ! qvg(0:nz, :) = qvg(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
-            ! ! extrapolate to halo grid points (needed to compute
-            ! ! z derivative used for the time step)
-            ! qvg(-1,   :) = two * qvg(0,  :) - qvg(1, :)
-            ! qvg(nz+1, :) = two * qvg(nz, :) - qvg(nz-1, :)
+    
             if (n_prec_parcels /= 0) then
                 prec_thetag(0,  :) = two * prec_thetag(0,  :)
                 prec_thetag(nz, :) = two * prec_thetag(nz, :)
@@ -190,6 +186,16 @@ module prec_parcel_interpl
                 ! z derivative used for the time step)
                 prec_thetag(-1,   :) = two * prec_thetag(0,  :) - prec_thetag(1, :)
                 prec_thetag(nz+1, :) = two * prec_thetag(nz, :) - prec_thetag(nz-1, :)
+            
+                prec_qvg(0,  :) = two * prec_qvg(0,  :)
+                prec_qvg(nz, :) = two * prec_qvg(nz, :)
+                prec_qvg(1,    :) = prec_qvg(1,    :) + prec_qvg(-1,   :)
+                prec_qvg(nz-1, :) = prec_qvg(nz-1, :) + prec_qvg(nz+1, :)
+                prec_qvg(0:nz, :) = prec_qvg(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
+                ! extrapolate to halo grid points (needed to compute
+                ! z derivative used for the time step)
+                prec_qvg(-1,   :) = two * prec_qvg(0,  :) - prec_qvg(1, :)
+                prec_qvg(nz+1, :) = two * prec_qvg(nz, :) - prec_qvg(nz-1, :)
             end if  
             ! sum halo contribution into internal cells
             ! (be aware that halo cell contribution at upper boundary

@@ -88,6 +88,7 @@
         double precision, allocatable, dimension(:) :: qv ! for evaporation calculations
         double precision, allocatable, dimension(:) :: theta ! for evaporation calculations 
         double precision, allocatable, dimension(:) :: latent_heat ! latent heat content of parcel  
+        double precision, allocatable, dimension(:) :: evap_mass   ! evaporated mass 
         contains
             procedure :: alloc => prec_parcel_alloc
             procedure :: dealloc => prec_parcel_dealloc
@@ -239,6 +240,7 @@
             allocate(this%qv(num))
             allocate(this%theta(num))
             allocate(this%latent_heat(num))
+            allocate(this%evap_mass(num))
 
             call this%register_attribute(this%volume, "volume", "m^3")
             call this%register_attribute(this%qr, "qr", "kg/kg")
@@ -248,6 +250,7 @@
             call this%register_attribute(this%qv, "qv", "kg/kg")
             call this%register_attribute(this%theta, "theta", "K")
             call this%register_attribute(this%latent_heat, "latent_heat", "J")
+            call this%register_attribute(this%evap_mass, "evap_mass", "kg")
 
         end subroutine prec_parcel_alloc
 
@@ -264,6 +267,7 @@
             call try_deallocate(this%qv)
             call try_deallocate(this%theta)
             call try_deallocate(this%latent_heat)
+            call try_deallocate(this%evap_mass)
 
             call this%base_dealloc
 
@@ -285,6 +289,7 @@
             call resize_array(this%qv, new_size, this%local_num)
             call resize_array(this%theta, new_size, this%local_num)
             call resize_array(this%latent_heat, new_size, this%local_num)
+            call resize_array(this%evap_mass, new_size, this%local_num)
 
             call this%reset_attribute(this%volume, "volume")
             call this%reset_attribute(this%qr, "qr")
@@ -294,6 +299,7 @@
             call this%reset_attribute(this%qv, "qv")
             call this%reset_attribute(this%theta, "theta")
             call this%reset_attribute(this%latent_heat, "latent_heat")
+            call this%reset_attribute(this%evap_mass, "evap_mass")
 
         end subroutine prec_parcel_resize
 
@@ -744,6 +750,7 @@
             this%dmass(n) = -evap_rate
             this%dnumber(n) =0.0
             this%latent_heat(n) = ((L_v/c_p)/exn)*(-evap_rate)
+            this%evap_mass(n) = -evap_rate
             
         end do
         !$omp end parallel do

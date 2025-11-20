@@ -539,9 +539,9 @@ module parcel_interpl
         ! @param[inout] vgrad is the parcel strain
         ! @param[in] add contributions, i.e. do not reset parcel quantities to zero before doing grid2par.
         !            (optional)
-        subroutine grid2par(vel, vor, vgrad,theta, add)
+        subroutine grid2par(vel, vor, vgrad,theta,qv, add)
             double precision,     intent(inout) :: vel(:, :), vor(:, :), vgrad(:, :)
-            double precision,     intent(inout) :: theta(:)
+            double precision,     intent(inout) :: theta(:), qv(:)
             logical, optional, intent(in)       :: add
             double precision                    :: points(2, 2), weight(0:1, 0:1)
             integer                             :: n, p, l
@@ -611,10 +611,11 @@ module parcel_interpl
                 enddo
                 if (n==1) then
                     
-                    print *, "thetag:", thetag(js:js+1, is:is+1)
-                    print *, "theta(n):", theta(n)
+                    print *, "qvg:", qvg(js:js+1, is:is+1)
+                    print *, "qv(n):", qv(n)
                 endif
                 theta(n) =  sum(2*weight * thetag(js:js+1, is:is+1))
+                qv(n)    =  sum(2*weight * qvg(js:js+1, is:is+1))
                 
             enddo
             !$omp end do
@@ -630,10 +631,10 @@ module parcel_interpl
         ! @param[inout] vel is the parcel velocity
         ! @param[inout] vor is the parcel vorticity
         ! @param[inout] vgrad is the parcel strain
-        subroutine grid2par_add(vel, vor, vgrad,theta)
+        subroutine grid2par_add(vel, vor, vgrad,theta,qv)
             double precision,       intent(inout) :: vel(:, :), vor(:, :), vgrad(:, :)
-            double precision,     intent(inout) :: theta(:)
-            call grid2par(vel, vor, vgrad, theta, add=.true.)
+            double precision,     intent(inout) :: theta(:),qv(:)
+            call grid2par(vel, vor, vgrad, theta,qv, add=.true.)
 
         end subroutine grid2par_add
 

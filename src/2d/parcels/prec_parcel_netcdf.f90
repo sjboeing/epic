@@ -137,7 +137,7 @@ module prec_parcel_netcdf
 
             call define_netcdf_dataset(ncid=ncid,                               &
                                        name='dmass',                            &
-                                       long_name='parcel dry mass',             &
+                                       long_name='Dqr/Dt',             &
                                        std_name='',                             &
                                        unit='kg',                               &
                                        dtype=NF90_DOUBLE,                       &
@@ -146,7 +146,7 @@ module prec_parcel_netcdf
 
             call define_netcdf_dataset(ncid=ncid,                               &
                                        name='dnumber',                          &
-                                       long_name='parcel dry number',           &
+                                       long_name='DNr/Dt',           &
                                        std_name='',                             &
                                        unit='/kg',                              &
                                        dtype=NF90_DOUBLE,                       &

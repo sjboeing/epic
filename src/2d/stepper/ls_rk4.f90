@@ -12,7 +12,7 @@ module ls_rk4
     use utils, only : write_step
     use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add
     use prec_parcel_interpl, only : prec_par2grid, prec_grid2par, prec_grid2par_add
-    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag, prec_thetag
+    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag,qvg, prec_thetag,prec_qvg
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_diagnostics, only : calculate_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
@@ -63,6 +63,7 @@ module ls_rk4
             if(microphysics%l_precipitation) then
                 call prec_par2grid(prec_parcels)
                 thetag = thetag + prec_thetag
+                qvg = qvg + prec_qvg
             end if
 
             ! need to be called in order to set initial time step;
@@ -79,7 +80,7 @@ module ls_rk4
             dt = get_time_step(t)
             select type (parcels)
             type is (realistic_parcel_type)
-                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%theta)
+                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%theta,parcels%qv)
             end select
                 if(microphysics%l_precipitation) then
                 call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
@@ -113,6 +114,7 @@ module ls_rk4
                 if(microphysics%l_precipitation) then
                     call prec_par2grid(prec_parcels)
                     thetag = thetag + prec_thetag
+                    qvg = qvg + prec_qvg
                     if(microphysics%l_sedimentation) then
                         prec_parcels%local_num = n_prec_parcels
                         call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
@@ -170,7 +172,7 @@ module ls_rk4
                 endif
                 select type (parcels)
                 type is (realistic_parcel_type)
-                call grid2par_add(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%theta)
+                call grid2par_add(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%theta,parcels%qv)
                 end select
                 if(microphysics%l_precipitation) then
                     call prec_grid2par_add(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
@@ -211,6 +213,8 @@ module ls_rk4
                                     + cb * dt * prec_parcels%dnumber(n)
                     prec_parcels%latent_heat(n) =  prec_parcels%latent_heat(n)&
                                     + cb*dt * prec_parcels%latent_heat(n)
+                    prec_parcels%evap_mass(n) =  prec_parcels%evap_mass(n)&
+                                    + cb*dt * prec_parcels%evap_mass(n)
                 enddo
                 !$omp end parallel do
                
