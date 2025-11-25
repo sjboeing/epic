@@ -56,8 +56,11 @@
 
     type, extends(ellipsoid_parcel_type) :: realistic_parcel_type ! add procedures
         double precision, allocatable, dimension(:) :: qv
+        double precision, allocatable, dimension(:) :: dqv
         double precision, allocatable, dimension(:) :: ql
+        double precision, allocatable, dimension(:) :: dql
         double precision, allocatable, dimension(:) :: theta
+        double precision, allocatable, dimension(:) :: dtheta
         double precision, allocatable, dimension(:) :: Nl ! optional droplet number
         double precision, allocatable, dimension(:) :: merge_qv
         double precision, allocatable, dimension(:) :: merge_ql
@@ -83,12 +86,11 @@
         double precision, allocatable, dimension(:) :: volume
         double precision, allocatable, dimension(:) :: qr
         double precision, allocatable, dimension(:) :: Nr ! droplet number
-        double precision, allocatable, dimension(:) :: dmass ! evaporation mass change rate
-        double precision, allocatable, dimension(:) :: dnumber ! evaporation droplet number change rate
+        double precision, allocatable, dimension(:) :: dqr ! dqr/dt
+        double precision, allocatable, dimension(:) :: dNr ! dNr/dt
         double precision, allocatable, dimension(:) :: qv ! for evaporation calculations
         double precision, allocatable, dimension(:) :: theta ! for evaporation calculations 
-        double precision, allocatable, dimension(:) :: latent_heat ! latent heat content of parcel  
-        double precision, allocatable, dimension(:) :: evap_mass   ! evaporated mass 
+        
         contains
             procedure :: alloc => prec_parcel_alloc
             procedure :: dealloc => prec_parcel_dealloc
@@ -164,14 +166,20 @@
             call this%ellipsoid_alloc(num)
 
             allocate(this%theta(num))
+            allocate(this%dtheta(num))
 
             call this%register_attribute(this%theta, "theta", "K")
+            call this%register_attribute(this%dtheta, "dtheta", "K/s")
 
             if(this%is_moist) then
                 allocate(this%qv(num))
                 allocate(this%ql(num))
+                allocate(this%dqv(num))
+                allocate(this%dql(num))
                 call this%register_attribute(this%qv, "qv", "kg/kg")
                 call this%register_attribute(this%ql, "ql", "kg/kg")
+                call this%register_attribute(this%dqv, "dqv", "kg/kg/s")
+                call this%register_attribute(this%dql, "dql", "kg/kg/s")
             endif
 
             if(this%has_droplets) then
@@ -187,10 +195,13 @@
             class(realistic_parcel_type), intent(inout) :: this
 
             call try_deallocate(this%theta)
+            call try_deallocate(this%dtheta)
 
             if(this%is_moist) then
                 call try_deallocate(this%qv)
                 call try_deallocate(this%ql)
+                call try_deallocate(this%dqv)
+                call try_deallocate(this%dql)
             endif
 
             if(this%has_droplets) then
@@ -210,12 +221,18 @@
             call this%ellipsoid_resize(new_size)
 
             call resize_array(this%theta, new_size, this%local_num)
+            call resize_array(this%dtheta, new_size, this%local_num)
             call resize_array(this%qv, new_size, this%local_num)
+            call resize_array(this%dqv, new_size, this%local_num)
             call resize_array(this%ql, new_size, this%local_num)
+            call resize_array(this%dql, new_size, this%local_num)
 
             call this%reset_attribute(this%theta, "theta")
+            call this%reset_attribute(this%dtheta, "dtheta")
             call this%reset_attribute(this%qv, "qv")
+            call this%reset_attribute(this%dqv, "dqv")
             call this%reset_attribute(this%ql, "ql")
+            call this%reset_attribute(this%dql, "dql")
 
             if(this%has_droplets) then
                 call resize_array(this%Nl, new_size, this%local_num)
@@ -235,23 +252,20 @@
             allocate(this%volume(num))
             allocate(this%qr(num))
             allocate(this%Nr(num))
-            allocate(this%dmass(num))
-            allocate(this%dnumber(num))
+            allocate(this%dqr(num))
+            allocate(this%dnr(num))
             allocate(this%qv(num))
             allocate(this%theta(num))
-            allocate(this%latent_heat(num))
-            allocate(this%evap_mass(num))
+            
 
             call this%register_attribute(this%volume, "volume", "m^3")
             call this%register_attribute(this%qr, "qr", "kg/kg")
             call this%register_attribute(this%Nr, "Nr", "/m^3")
-            call this%register_attribute(this%dmass, "dmass", "kg/s")
-            call this%register_attribute(this%dnumber, "dnumber", "/s")
+            call this%register_attribute(this%dqr, "dqr", "kg/s")
+            call this%register_attribute(this%dnr, "dnr", "/s")
             call this%register_attribute(this%qv, "qv", "kg/kg")
             call this%register_attribute(this%theta, "theta", "K")
-            call this%register_attribute(this%latent_heat, "latent_heat", "J")
-            call this%register_attribute(this%evap_mass, "evap_mass", "kg")
-
+           
         end subroutine prec_parcel_alloc
 
         !::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -262,12 +276,11 @@
             call try_deallocate(this%volume)
             call try_deallocate(this%qr)
             call try_deallocate(this%Nr)
-            call try_deallocate(this%dmass)
-            call try_deallocate(this%dnumber)
+            call try_deallocate(this%dqr)
+            call try_deallocate(this%dnr)
             call try_deallocate(this%qv)
             call try_deallocate(this%theta)
-            call try_deallocate(this%latent_heat)
-            call try_deallocate(this%evap_mass)
+            
 
             call this%base_dealloc
 
@@ -284,22 +297,20 @@
             call resize_array(this%volume, new_size, this%local_num)
             call resize_array(this%qr, new_size, this%local_num)
             call resize_array(this%Nr, new_size, this%local_num)
-            call resize_array(this%dmass, new_size, this%local_num)
-            call resize_array(this%dnumber, new_size, this%local_num)
+            call resize_array(this%dqr, new_size, this%local_num)
+            call resize_array(this%dnr, new_size, this%local_num)
             call resize_array(this%qv, new_size, this%local_num)
             call resize_array(this%theta, new_size, this%local_num)
-            call resize_array(this%latent_heat, new_size, this%local_num)
-            call resize_array(this%evap_mass, new_size, this%local_num)
+            
 
             call this%reset_attribute(this%volume, "volume")
             call this%reset_attribute(this%qr, "qr")
             call this%reset_attribute(this%Nr, "Nr")
-            call this%reset_attribute(this%dmass, "dmass")
-            call this%reset_attribute(this%dnumber, "dnumber")
+            call this%reset_attribute(this%dqr, "dqr")
+            call this%reset_attribute(this%dnr, "dnr")
             call this%reset_attribute(this%qv, "qv")
             call this%reset_attribute(this%theta, "theta")
-            call this%reset_attribute(this%latent_heat, "latent_heat")
-            call this%reset_attribute(this%evap_mass, "evap_mass")
+            
 
         end subroutine prec_parcel_resize
 
@@ -312,9 +323,12 @@
             call this%ellipsoid_split(n, n_thread_loc, d_pos_split)
 
             this%theta(n_thread_loc) = this%theta(n)
+            this%dtheta(n_thread_loc) = this%dtheta(n)
             if(this%is_moist) then
                 this%qv(n_thread_loc) = this%qv(n)
+                this%dqv(n_thread_loc) = this%dqv(n)
                 this%ql(n_thread_loc) = this%ql(n)
+                this%dql(n_thread_loc) = this%dql(n)
             endif
             if(this%has_droplets) then
                 this%Nl(n_thread_loc) = this%Nl(n)
@@ -721,7 +735,7 @@
 
     subroutine evaporation(this)
         class(prec_parcel_type), intent(inout) :: this
-        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press, evap_rate
+        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press
         integer :: n
         
         !$omp parallel do default(shared) private(n,exn,temp,ro_air,slope,vent_r,abliq,ws,press)
@@ -730,9 +744,7 @@
             press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
             exn = (press/p_ref)**(r_d/c_p)
             temp = this%theta(n)*exn
-            if (n==1) then 
-                print *, "Evaporation theta: ", this%theta(n) 
-            end if
+            
             ro_air = press/(r_d*temp)
             ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
             slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
@@ -745,12 +757,12 @@
             
             abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
             
-            evap_rate = (1.0-this%qv(n)/ws)*vent_r*abliq
+            this%dqr(n) = -(1.0-this%qv(n)/ws)*vent_r*abliq
             
-            this%dmass(n) = -evap_rate
-            this%dnumber(n) =0.0
-            this%latent_heat(n) = ((L_v/c_p)/exn)*(-evap_rate)
-            this%evap_mass(n) = -evap_rate
+           
+            
+            this%dnr(n) =0.0
+            
             
         end do
         !$omp end parallel do

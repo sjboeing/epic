@@ -110,7 +110,7 @@ module utils
             endif
             select type (parcels)
             type is (realistic_parcel_type)
-                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain,parcels%theta,parcels%qv)
+                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain,parcels%qv)
             end select
             if(microphysics%l_precipitation) then
                 call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
