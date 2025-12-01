@@ -12,7 +12,7 @@ module ls_rk4
     use utils, only : write_step
     use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add
     use prec_parcel_interpl, only : prec_par2grid, prec_grid2par, prec_grid2par_add
-    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag,qvg,dqrg
+    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag,qvg
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_diagnostics, only : calculate_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
@@ -63,7 +63,7 @@ module ls_rk4
             if(microphysics%l_precipitation) then
                 call prec_par2grid(prec_parcels)
             end if
-
+        
             ! need to be called in order to set initial time step;
             ! this is also needed for the first ls-rk4 substep
             call vor2vel(vortg, velog, velgradg)
@@ -89,7 +89,8 @@ module ls_rk4
                 endif
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
-                    call prec_parcels%evaporation()
+                    !call prec_parcels%evaporation()
+                    
                 endif
             endif
 
@@ -101,7 +102,7 @@ module ls_rk4
 
             do n = 1, 4
                 call ls_rk4_substep(dt, n)
-
+                
                 select type (parcels)
                 type is (idealised_parcel_type)
                     call par2grid_idealised(parcels)
@@ -111,13 +112,16 @@ module ls_rk4
                
                 if(microphysics%l_precipitation) then
                     call prec_par2grid(prec_parcels)
+                    
                     if(microphysics%l_sedimentation) then
                         prec_parcels%local_num = n_prec_parcels
                         call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
                     endif
                     if (microphysics%l_evaporation) then
                         prec_parcels%local_num = n_prec_parcels
+                        
                         call prec_parcels%evaporation()
+                        
                     endif
                 end if
             enddo
@@ -130,8 +134,6 @@ module ls_rk4
             ! we need to subtract 14 calls since we start and stop
             ! the timer multiple times which increments n_calls
             timings(rk4_timer)%n_calls =  timings(rk4_timer)%n_calls - 14
-
-            print *, 'Completed ls-RK4 step at time ', t+dt, ' with dt = ', dt
             t = t + dt
         end subroutine ls_rk4_step
 
@@ -144,10 +146,10 @@ module ls_rk4
             integer,          intent(in) :: step
             double precision             :: ca, cb
             integer                      :: n
-
+            !print *, "Step:", step
             ca = cas(step)
             cb = cbs(step)
-
+            
             if (step == 1) then
                 call start_timer(rk4_timer)
 
@@ -166,14 +168,16 @@ module ls_rk4
                 else
                     call vorticity_tendency(tbuoyg, vtend)
                 endif
+                
                 select type (parcels)
                 type is (realistic_parcel_type)
                 call grid2par_add(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%dql)
                 end select
+               
                 if(microphysics%l_precipitation) then
                     call prec_grid2par_add(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
                 endif
-
+                
                 call start_timer(rk4_timer)
 
                 !$omp parallel do default(shared) private(n)
@@ -187,7 +191,7 @@ module ls_rk4
             endif
 
             call start_timer(rk4_timer)
-
+           
             !$omp parallel do default(shared) private(n)
             do n = 1, n_parcels
                 parcels%position(:, n) = parcels%position(:, n) &
@@ -201,7 +205,7 @@ module ls_rk4
                 end select
             enddo
             !$omp end parallel do
-
+            
             if(microphysics%l_precipitation) then
                 !$omp parallel do default(shared) private(n)
                 do n = 1, n_prec_parcels
@@ -209,9 +213,7 @@ module ls_rk4
                                           + cb * dt * prec_parcels%delta_pos(:, n)
                     prec_parcels%qr(n) = prec_parcels%qr(n) &
                                     + cb * dt * prec_parcels%dqr(n)
-                    if (n==1) then
-                        print *, "prec_parcels%qr = ", prec_parcels%qr(n)
-                    end if
+                    !print *, "cb*dt*prec_parcels%dqr=",cb * dt * prec_parcels%dqr(n)
                     prec_parcels%nr(n) = prec_parcels%nr(n) &
                                     + cb * dt * prec_parcels%dNr(n)
                     
@@ -222,9 +224,10 @@ module ls_rk4
                 call prec_parcels%goners
                 n_prec_parcels = prec_parcels%local_num
             endif
-
+            
             call stop_timer(rk4_timer)
-            call parcels%saturation_adjustment
+            
+           
             if (step == 5) then
                return
             endif
@@ -239,22 +242,24 @@ module ls_rk4
                 select type (parcels)
                 type is (realistic_parcel_type)
                 parcels%dql(n) = ca * parcels%dql(n)
+
                 end select
             enddo
             !$omp end parallel do
-
+            ! print *, " ls_rk4 line 248 qdr", sum(prec_parcels%dqr)
             if(microphysics%l_precipitation) then
                 !$omp parallel do default(shared) private(n)
                 do n = 1, n_prec_parcels
+                    
                     prec_parcels%delta_pos(:, n) = ca * prec_parcels%delta_pos(:, n)
                     prec_parcels%dqr(n) = ca * prec_parcels%dqr(n)
                     prec_parcels%dNr(n) = ca * prec_parcels%dNr(n)
                 enddo
                 !$omp end parallel do
             end if
-
+            ! print *, "ls_rk4 line 258 qdr", sum(prec_parcels%dqr)
             call stop_timer(rk4_timer)
-
+            
         end subroutine ls_rk4_substep
 
 end module ls_rk4

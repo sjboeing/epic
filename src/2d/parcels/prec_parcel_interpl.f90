@@ -58,6 +58,7 @@ module prec_parcel_interpl
             !$omp do private(n, i, j, points, pvol, btot, is, js, weights) &
             !$omp& reduction(+:prec_nparg, qrg, Nrg,dqrg,dNrg, prec_tbuoyg, prec_volg)
             do n = 1, n_prec_parcels
+                
                 pvol = prec_parcels%volume(n)
 
                 call prec_parcels%get_buoyancy(n, btot)
@@ -89,7 +90,7 @@ module prec_parcel_interpl
                 Nrg(js:js+1, is:is+1) = Nrg(js:js+1, is:is+1) &
                                    + weights * prec_parcels%Nr(n)
                 dqrg(js:js+1, is:is+1) = dqrg(js:js+1, is:is+1) &
-                                   + weights * prec_parcels%dqr(n)
+                                   + weights * prec_parcels%evap_mass(n) 
                 dNrg(js:js+1, is:is+1) = dNrg(js:js+1, is:is+1) &
                                       + weights * prec_parcels%dnr(n)
                 

@@ -90,7 +90,7 @@
         double precision, allocatable, dimension(:) :: dNr ! dNr/dt
         double precision, allocatable, dimension(:) :: qv ! for evaporation calculations
         double precision, allocatable, dimension(:) :: theta ! for evaporation calculations 
-        
+        double precision, allocatable, dimension(:) :: evap_mass ! for interpolation
         contains
             procedure :: alloc => prec_parcel_alloc
             procedure :: dealloc => prec_parcel_dealloc
@@ -256,6 +256,7 @@
             allocate(this%dnr(num))
             allocate(this%qv(num))
             allocate(this%theta(num))
+            allocate(this%evap_mass(num))
             
 
             call this%register_attribute(this%volume, "volume", "m^3")
@@ -265,6 +266,7 @@
             call this%register_attribute(this%dnr, "dnr", "/s")
             call this%register_attribute(this%qv, "qv", "kg/kg")
             call this%register_attribute(this%theta, "theta", "K")
+            call this%register_attribute(this%evap_mass, "evap_mass","kg/kg")
            
         end subroutine prec_parcel_alloc
 
@@ -280,6 +282,7 @@
             call try_deallocate(this%dnr)
             call try_deallocate(this%qv)
             call try_deallocate(this%theta)
+            call try_deallocate(this%evap_mass)
             
 
             call this%base_dealloc
@@ -301,6 +304,7 @@
             call resize_array(this%dnr, new_size, this%local_num)
             call resize_array(this%qv, new_size, this%local_num)
             call resize_array(this%theta, new_size, this%local_num)
+            call resize_array(this%evap_mass, new_size, this%local_num)
             
 
             call this%reset_attribute(this%volume, "volume")
@@ -310,6 +314,7 @@
             call this%reset_attribute(this%dnr, "dnr")
             call this%reset_attribute(this%qv, "qv")
             call this%reset_attribute(this%theta, "theta")
+            call this%reset_attribute(this%evap_mass, "evap_mass")
             
 
         end subroutine prec_parcel_resize
@@ -758,7 +763,7 @@
             abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
             
             this%dqr(n) = -(1.0-this%qv(n)/ws)*vent_r*abliq
-            
+            this%evap_mass(n) = this%dqr(n)
            
             
             this%dnr(n) =0.0

@@ -38,6 +38,7 @@ program epic2d
     implicit none
 
     integer          :: epic_timer
+    double precision :: error, total_water = 0 
 
     ! Read command line (verbose, filename, etc.)
     call parse_command_line
@@ -125,8 +126,13 @@ program epic2d
                     print "(a15, f0.4)", "time:          ", t
                 endif
 #endif
+                total_water = sum(qrg+qvg+qlg)
                 call ls_rk4_step(t)
-
+                print *, "Sums of qrg, qvg, qlg:",sum(qrg),sum(qvg),sum(qlg)
+                print *, "total water:",sum(qrg+qvg+qlg)
+                error = total_water - sum(qrg + qvg + qlg)
+                
+                print *, "error:",error
                 call merge_ellipses(parcels)
 
                 call split_ellipses(parcel%lambda_max)
