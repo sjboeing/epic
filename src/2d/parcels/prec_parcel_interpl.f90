@@ -252,7 +252,7 @@ module prec_parcel_interpl
             endif
 
             !$omp parallel default(shared)
-            !$omp do private(n, p, l, points, is, js, weights)
+            !$omp do private(n, l, points, is, js, weights)
             do n = 1, n_prec_parcels
                 points = prec_parcels%position(:, n)
 
