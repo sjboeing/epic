@@ -398,7 +398,7 @@ module parcel_interpl
             enddo
             !$omp end do
             !$omp end parallel
-
+            print *, "before halo adjustments qv=",sum(qvg)
             ! apply periodicity
             volg(:, 0)    = volg(:, 0) + volg(:, nx)
             volg(:, nx-1) = volg(:, nx-1) + volg(:, -1)
@@ -521,7 +521,7 @@ module parcel_interpl
 
             nsparg(0,    :) = nsparg(0,    :) + nsparg(-1, :)
             nsparg(nz-1, :) = nsparg(nz-1, :) + nsparg(nz, :)
-
+            print *, "after halo adjustments qv=", sum(qvg)
             ! sanity check
             if (sum(nparg(0:nz-1, :)) /= n_parcels) then
                 print *, "par2grid: Wrong total number of parcels!"
@@ -611,14 +611,9 @@ module parcel_interpl
                     end do
                     vor(1, n) = vor(1, n) + sum(weight * vtend(js:js+1, is:is+1))
                 enddo
-                ! if ((sum(dqrg(js:js+1, is:is+1)))/=0) then
-                    
-                !     print *, "Debug grid2par: dqrg=", dqrg(js:js+1, is:is+1)
-                    
-                ! endif
-                dql(n) = dql(n) + sum(weight * dqrg(js:js+1, is:is+1))
-                
-                
+
+                dql(n) = -sum(weights * dqrg(js:js+1, is:is+1))
+
                 
             enddo
             !$omp end do
@@ -638,7 +633,6 @@ module parcel_interpl
             double precision,       intent(inout) :: vel(:, :), vor(:, :), vgrad(:, :)
             double precision,     intent(inout) :: dql(:)
             call grid2par(vel, vor, vgrad, dql, add=.true.)
-
         end subroutine grid2par_add
 
         !::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
