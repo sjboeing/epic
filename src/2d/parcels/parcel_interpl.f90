@@ -331,7 +331,7 @@ module parcel_interpl
             double precision :: pvol, weight(0:1, 0:1), btot
 
             call parcels%saturation_adjustment
-
+            
             call start_timer(par2grid_timer)
             vortg = zero
             volg = zero
@@ -351,7 +351,6 @@ module parcel_interpl
             !$omp& reduction(+:nparg, nsparg, vortg, qvg, qlg, tbuoyg, thetag, Nlg, volg)
             do n = 1, n_parcels
                 pvol = parcels%volume(n)
-
                 call parcels%get_buoyancy(n, btot)
 
                 points = get_ellipse_points(parcels%position(:, n), &
@@ -372,15 +371,17 @@ module parcel_interpl
 
                     ! get interpolation weights and mesh indices
                     call bilinear(points(:, p), is, js, weights)
-
+                    
                     weight = f12 * weights * pvol
-
+                    
                     vortg(js:js+1, is:is+1) = vortg(js:js+1, is:is+1) &
                                         + weight * parcels%vorticity(1, n)
 
                     if(parcels%is_moist) then
+                       
                         qvg(js:js+1, is:is+1) = qvg(js:js+1, is:is+1) &
-                                             + weight * parcels%qv(n)
+                                        + weight * parcels%qv(n)
+                        
                         qlg(js:js+1, is:is+1) = qlg(js:js+1, is:is+1) &
                                            + weight * parcels%ql(n)
                     endif
@@ -398,7 +399,7 @@ module parcel_interpl
             enddo
             !$omp end do
             !$omp end parallel
-            print *, "before halo adjustments qv=",sum(qvg)
+            
             ! apply periodicity
             volg(:, 0)    = volg(:, 0) + volg(:, nx)
             volg(:, nx-1) = volg(:, nx-1) + volg(:, -1)
@@ -427,11 +428,12 @@ module parcel_interpl
             thetag(:, nx)   = thetag(:, 0)
 
             if(parcels%is_moist) then
+                
                 qvg(:, 0)    = qvg(:, 0) + qvg(:, nx)
                 qvg(:, nx-1) = qvg(:, nx-1) + qvg(:, -1)
                 qvg(:, -1)   = qvg(:, nx-1)
                 qvg(:, nx)   = qvg(:, 0)
-
+                
                 qlg(:, 0)    = qlg(:, 0) + qlg(:, nx)
                 qlg(:, nx-1) = qlg(:, nx-1) + qlg(:, -1)
                 qlg(:, -1)   = qlg(:, nx-1)
@@ -460,10 +462,12 @@ module parcel_interpl
             vortg(nz-1, :) = vortg(nz-1, :) + vortg(nz+1, :)
 
             if(parcels%is_moist) then
+                
                 qvg(0,  :) = two * qvg(0,  :)
                 qvg(nz, :) = two * qvg(nz, :)
                 qvg(1,    :) = qvg(1,    :) + qvg(-1,   :)
                 qvg(nz-1, :) = qvg(nz-1, :) + qvg(nz+1, :)
+                
                 qlg(0,  :) = two * qlg(0,  :)
                 qlg(nz, :) = two * qlg(nz, :)
                 qlg(1,    :) = qlg(1,    :) + qlg(-1,   :)
@@ -494,8 +498,11 @@ module parcel_interpl
             ! are used to get u_z = w_x - zeta)
             vortg(-1,   :) = two * vortg(0,  :) - vortg(1,    :)
             vortg(nz+1, :) = two * vortg(nz, :) - vortg(nz-1, :)
-
+            
+            
+            
             if(parcels%is_moist) then
+                
                 qvg(0:nz, :) = qvg(0:nz, :) / volg(0:nz, :)
                 qlg(0:nz, :) = qlg(0:nz, :) / volg(0:nz, :)
             endif
@@ -521,13 +528,15 @@ module parcel_interpl
 
             nsparg(0,    :) = nsparg(0,    :) + nsparg(-1, :)
             nsparg(nz-1, :) = nsparg(nz-1, :) + nsparg(nz, :)
-            print *, "after halo adjustments qv=", sum(qvg)
+            
             ! sanity check
             if (sum(nparg(0:nz-1, :)) /= n_parcels) then
                 print *, "par2grid: Wrong total number of parcels!"
                 stop
             endif
-
+            
+            
+                        
             call stop_timer(par2grid_timer)
 
         end subroutine par2grid_realistic
