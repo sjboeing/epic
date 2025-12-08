@@ -725,5 +725,12 @@ module parcel_interpl
                 call par2grid_realistic(parcels)
             end select
         end subroutine par2grid
-
+        
+        function sum_field(field) result(field_sum)
+            double precision, intent(in) :: field(-1:nz+1,-1:nx)
+            double precision :: field_sum
+            field_sum = sum(field(1:nz-1, 0:nx-1))
+            field_sum = field_sum+0.5*sum(field(0, 0:nx-1))
+            field_sum = field_sum+0.5*sum(field(nz, 0:nx-1))
+        end function sum_field
 end module parcel_interpl
