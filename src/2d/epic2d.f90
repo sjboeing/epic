@@ -115,11 +115,11 @@ program epic2d
 #endif
             double precision :: t = zero ! current time
             integer          :: cor_iter    ! iterator for parcel correction
-            print *, "qvg at t=", t, "is: ", sum_field(qvg)
+            
             t = time%initial
             
             do while (t < time%limit)
-
+                print *, "qvg at t=", t, "is: ", sum_field(qvg)
 #ifdef ENABLE_VERBOSE
                 if (verbose) then
                     print "(a15, f0.4)", "time:          ", t
