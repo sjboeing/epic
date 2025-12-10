@@ -398,7 +398,6 @@ module parcel_interpl
             enddo
             !$omp end do
             !$omp end parallel
-            print *, "before weighting not normalised by volg (qvg+qlg) ", sum((qvg+qlg))
             ! apply periodicity
             volg(:, 0)    = volg(:, 0) + volg(:, nx)
             volg(:, nx-1) = volg(:, nx-1) + volg(:, -1)
@@ -521,8 +520,6 @@ module parcel_interpl
 
             nsparg(0,    :) = nsparg(0,    :) + nsparg(-1, :)
             nsparg(nz-1, :) = nsparg(nz-1, :) + nsparg(nz, :)
-            print *, "after weighting adjustments (qvg+qlg)*volg=", sum_field((qvg+qlg)*volg)
-            print *, "after weighting adjustments (qvg+qlg)=", sum_field((qvg+qlg))
 
             ! sanity check
             if (sum(nparg(0:nz-1, :)) /= n_parcels) then
@@ -719,13 +716,5 @@ module parcel_interpl
                 call par2grid_realistic(parcels)
             end select
         end subroutine par2grid
-
-        function sum_field(field) result(field_sum)
-            double precision, intent(in) :: field(-1:nz+1,-1:nx)
-            double precision :: field_sum
-            field_sum = sum(field(1:nz-1, 0:nx-1))
-            field_sum = field_sum+0.5*sum(field(0, 0:nx-1))
-            field_sum = field_sum+0.5*sum(field(nz, 0:nx-1))
-        end function sum_field
 
 end module parcel_interpl

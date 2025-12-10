@@ -18,6 +18,7 @@ module ls_rk4
     use field_diagnostics, only : calculate_field_diagnostics
     use parameters, only : nx, nz
     use options, only : microphysics
+    use fields
     use timer, only : start_timer, stop_timer, timings
     implicit none
 
@@ -58,14 +59,20 @@ module ls_rk4
             type is (idealised_parcel_type)
                 call par2grid_idealised(parcels)
             type is (realistic_parcel_type)
-
                 call par2grid_realistic(parcels)
-
             end select
 
             if(microphysics%l_precipitation) then
                 call prec_par2grid(prec_parcels)
             end if
+
+            if(microphysics%l_precipitation) then
+                print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg+qrg)*volg)
+                print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg+qrg))
+            else
+                print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg)*volg)
+                print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg))
+            endif
 
             ! need to be called in order to set initial time step;
             ! this is also needed for the first ls-rk4 substep
@@ -116,7 +123,17 @@ module ls_rk4
 
                 if(microphysics%l_precipitation) then
                     call prec_par2grid(prec_parcels)
+                end if
 
+                if(microphysics%l_precipitation) then
+                    print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg+qrg)*volg)
+                    print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg+qrg))
+                else
+                    print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg)*volg)
+                    print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg))
+                endif
+
+                if(microphysics%l_precipitation) then
                     if(microphysics%l_sedimentation) then
                         prec_parcels%local_num = n_prec_parcels
                         call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
@@ -265,5 +282,13 @@ module ls_rk4
             call stop_timer(rk4_timer)
 
         end subroutine ls_rk4_substep
+
+        function sum_field(field) result(field_sum)
+            double precision, intent(in) :: field(-1:nz+1,-1:nx)
+            double precision :: field_sum
+            field_sum = sum(field(1:nz-1, 0:nx-1))
+            field_sum = field_sum+0.5*sum(field(0, 0:nx-1))
+            field_sum = field_sum+0.5*sum(field(nz, 0:nx-1))
+        end function sum_field
 
 end module ls_rk4
