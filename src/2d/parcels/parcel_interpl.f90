@@ -620,9 +620,8 @@ module parcel_interpl
                     end do
                     vor(1, n) = vor(1, n) + sum(weight * vtend(js:js+1, is:is+1))
                 enddo
-
-                delta_ql(n) = delta_ql(n)-sum(weights * delta_qrg(js:js+1, is:is+1))
-
+                ! No add ability as evaporation called within ls_rk4
+                delta_ql(n) = -sum(weights * delta_qrg(js:js+1, is:is+1))
                 
             enddo
             !$omp end do
