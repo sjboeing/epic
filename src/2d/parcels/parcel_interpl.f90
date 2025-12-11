@@ -548,9 +548,9 @@ module parcel_interpl
         ! @param[inout] vgrad is the parcel strain
         ! @param[in] add contributions, i.e. do not reset parcel quantities to zero before doing grid2par.
         !            (optional)
-        subroutine grid2par(vel, vor, vgrad,dql, add)
+        subroutine grid2par(vel, vor, vgrad,delta_ql, add)
             double precision,     intent(inout) :: vel(:, :), vor(:, :), vgrad(:, :)
-            double precision,     intent(inout) :: dql(:)
+            double precision,     intent(inout) :: delta_ql(:)
             logical, optional, intent(in)       :: add
             double precision                    :: points(2, 2), weight(0:1, 0:1)
             integer                             :: n, p, l
@@ -565,7 +565,7 @@ module parcel_interpl
                     do n = 1, n_parcels
                         vel(:, n) = zero
                         vor(1, n)    = zero
-                        dql(n) = zero
+                        delta_ql(n) = zero
                         
                         
                         
@@ -580,7 +580,7 @@ module parcel_interpl
                 do n = 1, n_parcels
                     vel(:, n) = zero
                     vor(1, n)    = zero
-                    dql(n) = zero
+                    delta_ql(n) = zero
                    
                 enddo
                 !$omp end do
@@ -621,7 +621,7 @@ module parcel_interpl
                     vor(1, n) = vor(1, n) + sum(weight * vtend(js:js+1, is:is+1))
                 enddo
 
-                dql(n) = -sum(weights * dqrg(js:js+1, is:is+1))
+                delta_ql(n) = delta_ql(n)-sum(weights * delta_qrg(js:js+1, is:is+1))
 
                 
             enddo
@@ -638,10 +638,10 @@ module parcel_interpl
         ! @param[inout] vel is the parcel velocity
         ! @param[inout] vor is the parcel vorticity
         ! @param[inout] vgrad is the parcel strain
-        subroutine grid2par_add(vel, vor, vgrad,dql)
+        subroutine grid2par_add(vel, vor, vgrad,delta_ql)
             double precision,       intent(inout) :: vel(:, :), vor(:, :), vgrad(:, :)
-            double precision,     intent(inout) :: dql(:)
-            call grid2par(vel, vor, vgrad, dql, add=.true.)
+            double precision,     intent(inout) :: delta_ql(:)
+            call grid2par(vel, vor, vgrad, delta_ql, add=.true.)
         end subroutine grid2par_add
 
         !::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::

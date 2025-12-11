@@ -32,8 +32,8 @@ module fields
         prec_volg,   & ! volume from precip
         qrg,         & ! mixing ratio (rain)
         Nrg,         & ! rain droplet number
-        dqrg,        & ! change in rain mixing ratio
-        dNrg,         & ! change in rain droplet number
+        delta_qrg,        & ! change in rain mixing ratio
+        delta_Nrg,         & ! change in rain droplet number
 #ifndef NDEBUG
         sym_volg,  &   ! symmetry volume (debug mode only)
 #endif
@@ -112,9 +112,9 @@ module fields
             endif
 
             allocate(qrg(-1:nz+1, -1:nx))
-            allocate(dqrg(-1:nz+1, -1:nx))
+            allocate(delta_qrg(-1:nz+1, -1:nx))
             allocate(Nrg(-1:nz+1, -1:nx))
-            allocate(dNrg(-1:nz+1, -1:nx))
+            allocate(delta_Nrg(-1:nz+1, -1:nx))
             allocate(prec_volg(-1:nz+1, -1:nx))
             allocate(prec_tbuoyg(-1:nz+1, -1:nx))
             allocate(prec_nparg(-1:nz+1, -1:nx))
@@ -139,9 +139,9 @@ module fields
             if(microphysics%l_precipitation) then
                 call prec_field_alloc
                 qrg = zero
-                dqrg = zero
+                delta_qrg = zero
                 Nrg = zero
-                dNrg = zero
+                delta_Nrg = zero
                 prec_volg = zero
                 prec_tbuoyg = zero
                 prec_nparg = zero

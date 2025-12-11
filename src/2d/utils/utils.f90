@@ -25,7 +25,7 @@ module utils
     use parcel_types, only : idealised_parcel_alloc, realistic_parcel_alloc
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par
-    use prec_parcel_interpl, only : prec_par2grid, prec_grid2par
+    use prec_parcel_interpl, only : prec_par2grid, prec_grid2par,prec_evap2grid
     use netcdf_reader, only : get_file_type, get_num_steps, get_time, get_netcdf_box
     use parameters, only : lower, extent, update_parameters, max_num_parcels
     use physics, only : read_physical_quantities, print_physical_quantities, l_peref
@@ -108,13 +108,31 @@ module utils
             else
                 call vorticity_tendency(tbuoyg, vtend)
             endif
+           
+            !------------------grid2par-------------------
+             !Change 2: move grid2par
+                if(microphysics%l_precipitation) then
+                call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
+                
+                if(microphysics%l_sedimentation) then
+                    prec_parcels%local_num = n_prec_parcels
+                    call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
+                endif
+                if (microphysics%l_evaporation) then
+                    prec_parcels%local_num = n_prec_parcels
+                    call prec_parcels%evaporation()
+                     !Change 3: add evap2grid
+                    call prec_evap2grid(prec_parcels)
+                endif
+            endif
+
+            !Change 2: move grid2par
             select type (parcels)
             type is (realistic_parcel_type)
-                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain,parcels%dql)
+                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%delta_ql)
             end select
-            if(microphysics%l_precipitation) then
-                call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
-            endif
+            !----------------------------------------
+
 
             call calculate_parcel_diagnostics(parcels%delta_pos)
 

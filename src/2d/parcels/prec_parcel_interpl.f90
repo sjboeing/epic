@@ -25,7 +25,8 @@ module prec_parcel_interpl
     double precision :: weights(0:1,0:1)
 
     integer :: prec_par2grid_timer, &
-               prec_grid2par_timer
+               prec_grid2par_timer, &
+                prec_evap2grid_timer
 
     private :: is, js, weights
 
@@ -48,15 +49,14 @@ module prec_parcel_interpl
             prec_nparg = zero
             prec_tbuoyg = zero
             qrg = zero
-            dqrg = zero
             Nrg = zero
-            dNrg = zero
+            
             
 
             
             !$omp parallel default(shared)
             !$omp do private(n, i, j, points, pvol, btot, is, js, weights) &
-            !$omp& reduction(+:prec_nparg, qrg, Nrg,dqrg,dNrg, prec_tbuoyg, prec_volg)
+            !$omp& reduction(+:prec_nparg, qrg, Nrg,prec_tbuoyg, prec_volg)
             do n = 1, n_prec_parcels
                 
                 pvol = prec_parcels%volume(n)
@@ -89,10 +89,7 @@ module prec_parcel_interpl
                                    + weights * prec_parcels%qr(n)
                 Nrg(js:js+1, is:is+1) = Nrg(js:js+1, is:is+1) &
                                    + weights * prec_parcels%Nr(n)
-                dqrg(js:js+1, is:is+1) = dqrg(js:js+1, is:is+1) &
-                                   + weights * prec_parcels%evap_mass(n) 
-                dNrg(js:js+1, is:is+1) = dNrg(js:js+1, is:is+1) &
-                                      + weights * prec_parcels%dnr(n)
+                
                 
                 
                
@@ -119,20 +116,10 @@ module prec_parcel_interpl
             qrg(:, -1)   = qrg(:, nx-1)
             qrg(:, nx)   = qrg(:, 0)
 
-            dqrg(:, 0)    = dqrg(:, 0) + dqrg(:, nx)
-            dqrg(:, nx-1) = dqrg(:, nx-1) + dqrg(:, -1)
-            dqrg(:, -1)   = dqrg(:, nx-1)
-            dqrg(:, nx)   = dqrg(:, 0)  
-
             Nrg(:, 0)    = Nrg(:, 0) + Nrg(:, nx)
             Nrg(:, nx-1) = Nrg(:, nx-1) + Nrg(:, -1)
             Nrg(:, -1)   = Nrg(:, nx-1)
             Nrg(:, nx)   = Nrg(:, 0)
-
-            dNrg(:, 0)    = dNrg(:, 0) + dNrg(:, nx)
-            dNrg(:, nx-1) = dNrg(:, nx-1) + dNrg(:, -1)
-            dNrg(:, -1)   = dNrg(:, nx-1)
-            dNrg(:, nx)   = dNrg(:, 0)
 
             ! apply free slip boundary condition
             prec_volg(0,  :) = two * prec_volg(0,  :)
@@ -163,16 +150,6 @@ module prec_parcel_interpl
             qrg(-1,   :) = two * qrg(0,  :) - qrg(1, :)
             qrg(nz+1, :) = two * qrg(nz, :) - qrg(nz-1, :)
 
-            dqrg(0,  :) = two * dqrg(0,  :)
-            dqrg(nz, :) = two * dqrg(nz, :)
-            dqrg(1,    :) = dqrg(1,    :) + dqrg(-1,   :)
-            dqrg(nz-1, :) = dqrg(nz-1, :) + dqrg(nz+1, :)
-            dqrg(0:nz, :) = dqrg(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
-            ! extrapolate to halo grid points (needed to compute
-            ! z derivative used for the time step)
-            dqrg(-1,   :) = two * dqrg(0,  :) - dqrg(1, :)
-            dqrg(nz+1, :) = two * dqrg(nz, :) - dqrg(nz-1, :)
-
             Nrg(0,  :) = two * Nrg(0,  :)
             Nrg(nz, :) = two * Nrg(nz, :)
             Nrg(1,    :) = Nrg(1,    :) + Nrg(-1,   :)
@@ -182,17 +159,6 @@ module prec_parcel_interpl
             ! z derivative used for the time step)
             Nrg(-1,   :) = two * Nrg(0,  :) - Nrg(1, :)
             Nrg(nz+1, :) = two * Nrg(nz, :) - Nrg(nz-1, :)
-
-            dNrg(0,  :) = two * dNrg(0,  :)
-            dNrg(nz, :) = two * dNrg(nz, :)
-            dNrg(1,    :) = dNrg(1,    :) + dNrg(-1,   :)
-            dNrg(nz-1, :) = dNrg(nz-1, :) + dNrg(nz+1, :)
-            dNrg(0:nz, :) = dNrg(0:nz, :) / volg(0:nz, :) ! Note to divide by volg, not prec_volg!
-            ! extrapolate to halo grid points (needed to compute
-            ! z derivative used for the time step)
-            dNrg(-1,   :) = two * dNrg(0,  :) - dNrg(1, :)
-            dNrg(nz+1, :) = two * dNrg(nz, :) - dNrg(nz-1, :)
-    
            
             ! sum halo contribution into internal cells
             ! (be aware that halo cell contribution at upper boundary
@@ -290,5 +256,84 @@ module prec_parcel_interpl
             call prec_grid2par(vel,theta,qv, add=.true.)
 
         end subroutine prec_grid2par_add
+
+        subroutine prec_evap2grid(prec_parcels)
+            class(prec_parcel_type), intent(in) :: prec_parcels
+            double precision :: points(2)
+            integer          :: n, i, j
+            double precision :: pvol
+            ! call start_timer(prec_evap2grid_timer)
+            
+            delta_qrg = zero
+            delta_Nrg = zero
+            !$omp parallel default(shared)
+            !$omp do private(n, i, j, points, pvol, is, js, weights) &
+            !$omp& reduction(+:delta_qrg, delta_Nrg)
+            do n = 1, n_prec_parcels
+                
+                pvol = prec_parcels%volume(n)
+                
+                points = prec_parcels%position(:, n)
+                
+                call get_index(prec_parcels%position(:, n), i, j)
+                i = mod(i + nx, nx)
+               
+
+                ! ensure point is within the domain
+                call apply_periodic_bc(points(:))
+
+                ! get interpolation weights and mesh indices
+                call bilinear(points(:), is, js, weights)
+
+                weights = weights*pvol
+                
+    
+                delta_qrg(js:js+1, is:is+1) = delta_qrg(js:js+1, is:is+1) &
+                                   + weights * prec_parcels%delta_qr(n)
+                delta_Nrg(js:js+1, is:is+1) = delta_Nrg(js:js+1, is:is+1) &
+                                   + weights * prec_parcels%Nr(n)
+                
+            enddo
+            !$omp end do
+            !$omp end parallel
+            
+            ! apply periodicity
+
+            delta_qrg(:, 0)    = delta_qrg(:, 0) + delta_qrg(:, nx)
+            delta_qrg(:, nx-1) = delta_qrg(:, nx-1) + delta_qrg(:, -1)
+            delta_qrg(:, -1)   = delta_qrg(:, nx-1)
+            delta_qrg(:, nx)   = delta_qrg(:, 0)
+
+            delta_Nrg(:, 0)    = delta_Nrg(:, 0) + delta_Nrg(:, nx)
+            delta_Nrg(:, nx-1) = delta_Nrg(:, nx-1) + delta_Nrg(:, -1)
+            delta_Nrg(:, -1)   = delta_Nrg(:, nx-1)
+            delta_Nrg(:, nx)   = delta_Nrg(:, 0)
+
+            ! apply free slip boundary condition
+            delta_qrg(0,  :) = two * delta_qrg(0,  :)
+            delta_qrg(nz, :) = two * delta_qrg(nz, :)
+            delta_qrg(1,    :) = delta_qrg(1,    :) + delta_qrg(-1,   :)
+            delta_qrg(nz-1, :) = delta_qrg(nz-1, :) + delta_qrg(nz+1, :)
+            delta_qrg(0:nz, :) = delta_qrg(0:nz, :) / volg(0:nz, :) !   Note to divide by volg, not prec_volg!
+            ! extrapolate to halo grid points (needed to compute
+            ! z derivative used for the time step)
+            delta_qrg(-1,   :) = two * delta_qrg(0,  :) - delta_qrg(1, :)
+            delta_qrg(nz+1, :) = two * delta_qrg(nz, :) - delta_qrg(nz-1, :)              
+
+            delta_Nrg(0,  :) = two * delta_Nrg(0,  :)
+            delta_Nrg(nz, :) = two * delta_Nrg(nz, :)
+            delta_Nrg(1,    :) = delta_Nrg(1,    :) + delta_Nrg(-1,   :)
+            delta_Nrg(nz-1, :) = delta_Nrg(nz-1, :) + delta_Nrg(nz+1, :)
+            delta_Nrg(0:nz, :) = delta_Nrg(0:nz, :) / volg(0:nz, :) !   Note to divide by volg, not prec_volg!
+            ! extrapolate to halo grid points (needed to compute
+            ! z derivative used for the time step)
+            delta_Nrg(-1,   :) = two * delta_Nrg(0,  :) - delta_Nrg(1, :)
+            delta_Nrg(nz+1, :) = two * delta_Nrg(nz, :) - delta_Nrg(nz-1, :)    
+
+            ! call stop_timer(prec_evap2grid_timer)
+        
+        
+        
+        end subroutine prec_evap2grid 
 
 end module prec_parcel_interpl

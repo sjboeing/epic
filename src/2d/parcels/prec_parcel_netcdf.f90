@@ -21,12 +21,12 @@ module prec_parcel_netcdf
     integer            :: ncid
     integer            :: npar_dim_id, vol_id, qr_id,  &
                           x_pos_id, z_pos_id, Nr_id,   &
-                          t_axis_id, t_dim_id, dqr_id, dnr_id
+                          t_axis_id, t_dim_id, delta_qr_id, delta_nr_id
     double precision   :: restart_time
 
     private :: ncid, ncfname, n_writes, npar_dim_id,        &
                x_pos_id, z_pos_id, vol_id, qr_id, Nr_id,  &
-               t_axis_id, t_dim_id, dqr_id, dnr_id, &
+               t_axis_id, t_dim_id, delta_qr_id, delta_nr_id, &
                restart_time
 
     private :: ncbasename
@@ -136,22 +136,22 @@ module prec_parcel_netcdf
                                        varid=Nr_id)
 
             call define_netcdf_dataset(ncid=ncid,                               &
-                                       name='dqr',                            &
+                                       name='delta_qr',                            &
                                        long_name='Dqr/Dt',             &
                                        std_name='',                             &
                                        unit='kg',                               &
                                        dtype=NF90_DOUBLE,                       &
                                        dimids=dimids,                           &
-                                       varid=dqr_id)
+                                       varid=delta_qr_id)
 
             call define_netcdf_dataset(ncid=ncid,                               &
-                                       name='dnr',                          &
+                                       name='delta_nr',                          &
                                        long_name='DNr/Dt',           &
                                        std_name='',                             &
                                        unit='/kg',                              &
                                        dtype=NF90_DOUBLE,                       &
                                        dimids=dimids,                           &
-                                       varid=dnr_id)
+                                       varid=delta_nr_id)
 
             call close_definition(ncid)
 
@@ -191,8 +191,8 @@ module prec_parcel_netcdf
 
             call write_netcdf_dataset(ncid, Nr_id, prec_parcels%Nr(1:n_prec_parcels), start, cnt)
 
-            call write_netcdf_dataset(ncid, dqr_id, prec_parcels%dqr(1:n_prec_parcels), start, cnt)
-            call write_netcdf_dataset(ncid, dnr_id, prec_parcels%dnr(1:n_prec_parcels), start, cnt)
+            call write_netcdf_dataset(ncid, delta_qr_id, prec_parcels%delta_qr(1:n_prec_parcels), start, cnt)
+            call write_netcdf_dataset(ncid, delta_nr_id, prec_parcels%delta_nr(1:n_prec_parcels), start, cnt)
 
             ! increment counter
             n_writes = n_writes + 1
