@@ -87,10 +87,11 @@
         double precision, allocatable, dimension(:) :: qr
         double precision, allocatable, dimension(:) :: Nr ! droplet number
         double precision, allocatable, dimension(:) :: delta_qr ! delta_qr/dt
+        double precision, allocatable, dimension(:) :: delta_qr_substep ! delta_qr/dt
         double precision, allocatable, dimension(:) :: delta_Nr ! delta_Nr/dt
         double precision, allocatable, dimension(:) :: qv ! for evaporation calculations
-        double precision, allocatable, dimension(:) :: theta ! for evaporation calculations 
-        
+        double precision, allocatable, dimension(:) :: theta ! for evaporation calculations
+
         contains
             procedure :: alloc => prec_parcel_alloc
             procedure :: dealloc => prec_parcel_dealloc
@@ -253,21 +254,23 @@
             allocate(this%qr(num))
             allocate(this%Nr(num))
             allocate(this%delta_qr(num))
+            allocate(this%delta_qr_substep(num))
             allocate(this%delta_nr(num))
             allocate(this%qv(num))
             allocate(this%theta(num))
-            
-            
+
+
 
             call this%register_attribute(this%volume, "volume", "m^3")
             call this%register_attribute(this%qr, "qr", "kg/kg")
             call this%register_attribute(this%Nr, "Nr", "/m^3")
             call this%register_attribute(this%delta_qr, "delta_qr", "kg/s")
+            call this%register_attribute(this%delta_qr_substep, "delta_qr_substep", "kg/s")
             call this%register_attribute(this%delta_nr, "delta_nr", "/s")
             call this%register_attribute(this%qv, "qv", "kg/kg")
             call this%register_attribute(this%theta, "theta", "K")
-            
-           
+
+
         end subroutine prec_parcel_alloc
 
         !::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -279,11 +282,12 @@
             call try_deallocate(this%qr)
             call try_deallocate(this%Nr)
             call try_deallocate(this%delta_qr)
+            call try_deallocate(this%delta_qr_substep)
             call try_deallocate(this%delta_nr)
             call try_deallocate(this%qv)
             call try_deallocate(this%theta)
-           
-            
+
+
 
             call this%base_dealloc
 
@@ -301,21 +305,23 @@
             call resize_array(this%qr, new_size, this%local_num)
             call resize_array(this%Nr, new_size, this%local_num)
             call resize_array(this%delta_qr, new_size, this%local_num)
+            call resize_array(this%delta_qr_substep, new_size, this%local_num)
             call resize_array(this%delta_nr, new_size, this%local_num)
             call resize_array(this%qv, new_size, this%local_num)
             call resize_array(this%theta, new_size, this%local_num)
-            
-            
+
+
 
             call this%reset_attribute(this%volume, "volume")
             call this%reset_attribute(this%qr, "qr")
             call this%reset_attribute(this%Nr, "Nr")
             call this%reset_attribute(this%delta_qr, "delta_qr")
+            call this%reset_attribute(this%delta_qr_substep, "delta_qr_substep")
             call this%reset_attribute(this%delta_nr, "delta_nr")
             call this%reset_attribute(this%qv, "qv")
             call this%reset_attribute(this%theta, "theta")
-           
-            
+
+
 
         end subroutine prec_parcel_resize
 
@@ -605,7 +611,7 @@
                 temp_low=temp-L_v_over_c_p*ql_start
                 qsat_helper = 0.01d0*press*eval_spline(esat_spline, temp_low) - qsa4
                 if(qt_start*qsat_helper < qsa1) then ! Evaporate everything, if needed at all
-                   if(ql_start>0.0d0) then
+                   if(ql_start>0.0d0 .or. ql_start<0.0d0) then
                       this%theta(n)=theta_start-(L_v_over_c_p/exn)*ql_start
                       this%qv(n)=qt_start
                       this%ql(n)=0.0d0
@@ -722,8 +728,8 @@
         else
             !$omp parallel do default(shared) private(n,slope,asr1,asr2, vterm)
             do n = 1, this%local_num
-                
-                
+
+
                 slope = (fpi6*(rho_w/rho_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
                 !These are the mass weighted integrals for abel and shipway terminal velocity
                 asr1 = a1*((rho_ref/rho_air)**(f12))*(slope**(one+mu+three)*(slope+f1)**(-(one+mu+three+b1))) &
@@ -742,14 +748,14 @@
         class(prec_parcel_type), intent(inout) :: this
         double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press
         integer :: n
-        
+
         !$omp parallel do default(shared) private(n,exn,temp,ro_air,slope,vent_r,abliq,ws,press)
         do n = 1, this%local_num
-            
+
             press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
             exn = (press/p_ref)**(r_d/c_p)
             temp = this%theta(n)*exn
-            
+
             ro_air = press/(r_d*temp)
             ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
             slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
@@ -759,19 +765,18 @@
                     * (gamma((f12*b1 +mu +f52))/gamma((1+mu))) &
                     *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
                     *((slope)**(-f12*b1 -f32)))
-            
+
             abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
-            
-            this%delta_qr(n) = -(1.0-this%qv(n)/ws)*vent_r*abliq
-            
-           
-            
+
+            this%delta_qr(n) = this%delta_qr(n) - (1.0-this%qv(n)/ws)*vent_r*abliq
+            this%delta_qr_substep(n) = - (1.0-this%qv(n)/ws)*vent_r*abliq
+
             this%delta_nr(n) =0.0
-            
-            
+
+
         end do
         !$omp end parallel do
-        
+
     end subroutine evaporation
 
   subroutine goners(this)

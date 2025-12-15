@@ -108,12 +108,12 @@ module utils
             else
                 call vorticity_tendency(tbuoyg, vtend)
             endif
-           
+
             !------------------grid2par-------------------
-             !Change 2: move grid2par
-                if(microphysics%l_precipitation) then
+            !Change 2: move grid2par
+            if(microphysics%l_precipitation) then
                 call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
-                
+
                 if(microphysics%l_sedimentation) then
                     prec_parcels%local_num = n_prec_parcels
                     call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
@@ -131,8 +131,8 @@ module utils
             type is (realistic_parcel_type)
                 call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%delta_ql)
             end select
+            ! TODO: BRING IDEALISED GRIDPAR BACK
             !----------------------------------------
-
 
             call calculate_parcel_diagnostics(parcels%delta_pos)
 

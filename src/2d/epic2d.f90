@@ -23,7 +23,7 @@ program epic2d
     use field_diagnostics, only : field_stats_timer
     use field_diagnostics_netcdf, only : field_stats_io_timer
     use tri_inversion, only : init_inversion, vor2vel_timer, vtend_timer
-    use parcel_interpl, only : grid2par_timer, par2grid_timer,sum_field
+    use parcel_interpl, only : grid2par_timer, par2grid_timer
     use prec_parcel_interpl, only : prec_grid2par_timer, prec_par2grid_timer
 #ifndef NDEBUG
     use parcel_interpl, only : sym_vol2grid_timer
@@ -102,7 +102,7 @@ program epic2d
             call init_parcel_correction
 
             call field_default
-            
+
             call setup_output_files
 
         end subroutine
@@ -115,21 +115,18 @@ program epic2d
 #endif
             double precision :: t = zero ! current time
             integer          :: cor_iter    ! iterator for parcel correction
-            
+
             t = time%initial
-            
+
             do while (t < time%limit)
-                print *, "qvg at t=", t, "is: ", sum_field(qvg)
 #ifdef ENABLE_VERBOSE
                 if (verbose) then
                     print "(a15, f0.4)", "time:          ", t
                 endif
 #endif
-                
-
 
                 call ls_rk4_step(t)
-                
+
                 call merge_ellipses(parcels)
 
                 call split_ellipses(parcel%lambda_max)
@@ -140,9 +137,9 @@ program epic2d
                 enddo
 
                 call parcels%saturation_adjustment
-                
+
             enddo
-            
+
             ! write final step (we only write if we really advanced in time)
             if (t > time%initial) then
                 call write_last_step(t)

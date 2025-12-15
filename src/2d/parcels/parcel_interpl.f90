@@ -118,11 +118,11 @@ module parcel_interpl
 
                         ! ensure point is within the domain
                         call apply_periodic_bc(points(:, p))
-                        
+
                         ! get interpolation weights and mesh indices
                         call bilinear(points(:, p), is, js, weights)
-                        
-                        
+
+
                         sym_volg(js:js+1, is:is+1) = sym_volg(js:js+1, is:is+1) &
                                                + f12 * weights * pvol
                     enddo
@@ -331,7 +331,7 @@ module parcel_interpl
             double precision :: pvol, weight(0:1, 0:1), btot
 
             call parcels%saturation_adjustment
-            
+
             call start_timer(par2grid_timer)
             vortg = zero
             volg = zero
@@ -371,17 +371,17 @@ module parcel_interpl
 
                     ! get interpolation weights and mesh indices
                     call bilinear(points(:, p), is, js, weights)
-                    
+
                     weight = f12 * weights * pvol
-                    
+
                     vortg(js:js+1, is:is+1) = vortg(js:js+1, is:is+1) &
                                         + weight * parcels%vorticity(1, n)
 
                     if(parcels%is_moist) then
-                       
+
                         qvg(js:js+1, is:is+1) = qvg(js:js+1, is:is+1) &
                                         + weight * parcels%qv(n)
-                        
+
                         qlg(js:js+1, is:is+1) = qlg(js:js+1, is:is+1) &
                                            + weight * parcels%ql(n)
                     endif
@@ -399,7 +399,7 @@ module parcel_interpl
             enddo
             !$omp end do
             !$omp end parallel
-            
+
             ! apply periodicity
             volg(:, 0)    = volg(:, 0) + volg(:, nx)
             volg(:, nx-1) = volg(:, nx-1) + volg(:, -1)
@@ -428,12 +428,12 @@ module parcel_interpl
             thetag(:, nx)   = thetag(:, 0)
 
             if(parcels%is_moist) then
-                
+
                 qvg(:, 0)    = qvg(:, 0) + qvg(:, nx)
                 qvg(:, nx-1) = qvg(:, nx-1) + qvg(:, -1)
                 qvg(:, -1)   = qvg(:, nx-1)
                 qvg(:, nx)   = qvg(:, 0)
-                
+
                 qlg(:, 0)    = qlg(:, 0) + qlg(:, nx)
                 qlg(:, nx-1) = qlg(:, nx-1) + qlg(:, -1)
                 qlg(:, -1)   = qlg(:, nx-1)
@@ -462,12 +462,12 @@ module parcel_interpl
             vortg(nz-1, :) = vortg(nz-1, :) + vortg(nz+1, :)
 
             if(parcels%is_moist) then
-                
+
                 qvg(0,  :) = two * qvg(0,  :)
                 qvg(nz, :) = two * qvg(nz, :)
                 qvg(1,    :) = qvg(1,    :) + qvg(-1,   :)
                 qvg(nz-1, :) = qvg(nz-1, :) + qvg(nz+1, :)
-                
+
                 qlg(0,  :) = two * qlg(0,  :)
                 qlg(nz, :) = two * qlg(nz, :)
                 qlg(1,    :) = qlg(1,    :) + qlg(-1,   :)
@@ -498,11 +498,11 @@ module parcel_interpl
             ! are used to get u_z = w_x - zeta)
             vortg(-1,   :) = two * vortg(0,  :) - vortg(1,    :)
             vortg(nz+1, :) = two * vortg(nz, :) - vortg(nz-1, :)
-            
-            
-            
+
+
+
             if(parcels%is_moist) then
-                
+
                 qvg(0:nz, :) = qvg(0:nz, :) / volg(0:nz, :)
                 qlg(0:nz, :) = qlg(0:nz, :) / volg(0:nz, :)
             endif
@@ -528,15 +528,15 @@ module parcel_interpl
 
             nsparg(0,    :) = nsparg(0,    :) + nsparg(-1, :)
             nsparg(nz-1, :) = nsparg(nz-1, :) + nsparg(nz, :)
-            
+
             ! sanity check
             if (sum(nparg(0:nz-1, :)) /= n_parcels) then
                 print *, "par2grid: Wrong total number of parcels!"
                 stop
             endif
-            
-            
-                        
+
+
+
             call stop_timer(par2grid_timer)
 
         end subroutine par2grid_realistic
@@ -548,7 +548,7 @@ module parcel_interpl
         ! @param[inout] vgrad is the parcel strain
         ! @param[in] add contributions, i.e. do not reset parcel quantities to zero before doing grid2par.
         !            (optional)
-        subroutine grid2par(vel, vor, vgrad,delta_ql, add)
+        subroutine grid2par(vel, vor, vgrad, delta_ql, add)
             double precision,     intent(inout) :: vel(:, :), vor(:, :), vgrad(:, :)
             double precision,     intent(inout) :: delta_ql(:)
             logical, optional, intent(in)       :: add
@@ -566,10 +566,6 @@ module parcel_interpl
                         vel(:, n) = zero
                         vor(1, n)    = zero
                         delta_ql(n) = zero
-                        
-                        
-                        
-                        
                     enddo
                     !$omp end do
                     !$omp end parallel
@@ -581,7 +577,6 @@ module parcel_interpl
                     vel(:, n) = zero
                     vor(1, n)    = zero
                     delta_ql(n) = zero
-                   
                 enddo
                 !$omp end do
                 !$omp end parallel
@@ -619,10 +614,14 @@ module parcel_interpl
                                     + sum(weight * velgradg(js:js+1, is:is+1, l))
                     end do
                     vor(1, n) = vor(1, n) + sum(weight * vtend(js:js+1, is:is+1))
+
+                    if(allocated(delta_qrg_substep)) then
+                        ! No add ability as evaporation called within ls_rk4
+                        delta_ql(n) = delta_ql(n) - sum(weight * delta_qrg_substep(js:js+1, is:is+1))
+                    endif
+
                 enddo
-                ! No add ability as evaporation called within ls_rk4
-                delta_ql(n) = -sum(weights * delta_qrg(js:js+1, is:is+1))
-                
+
             enddo
             !$omp end do
             !$omp end parallel
@@ -724,7 +723,7 @@ module parcel_interpl
                 call par2grid_realistic(parcels)
             end select
         end subroutine par2grid
-        
+
         function sum_field(field) result(field_sum)
             double precision, intent(in) :: field(-1:nz+1,-1:nx)
             double precision :: field_sum
