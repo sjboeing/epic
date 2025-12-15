@@ -29,6 +29,8 @@
     double precision, parameter :: f2 = 4085.35
     double precision, parameter :: mu = 2.5
 
+    double precision :: summed_precipitation
+
     integer :: saturation_adjustment_timer
     logical :: splines_are_initiated = .false.
     type(spline) :: esat_spline, press_spline, exn_spline
@@ -792,6 +794,7 @@
         ! Replace this by a reduction loop first
         do n = 1, this%local_num
             if (this%position(this%z_dim, n) <= 0) then
+                summed_precipitation=summed_precipitation+this%volume(n)*this%qr(n)
                 n_del = n_del + 1
                 pid(n_del) = n
                 cycle
@@ -805,6 +808,9 @@
         if (n_del > 0) then
             call this%delete(pid=pid(0:n_del), n_del=n_del)
         end if
+
+        print *, "summed_precipitation (vol*qr)"
+        print *, summed_precipitation
 
         deallocate(pid)  ! Deallocate pid to free memory
     end subroutine goners
