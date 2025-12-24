@@ -29,7 +29,7 @@
     double precision, parameter :: f2 = 4085.35
     double precision, parameter :: mu = 2.5
 
-    double precision :: summed_precipitation
+    double precision :: summed_precipitation = 0.0, summed_deletion = 0.0
 
     integer :: saturation_adjustment_timer
     logical :: splines_are_initiated = .false.
@@ -799,6 +799,7 @@
                 pid(n_del) = n
                 cycle
             else if (this%qr(n) <= 0) then
+                summed_deletion=summed_deletion+this%volume(n)*this%qr(n)
                 n_del = n_del + 1
                 pid(n_del) = n
                 cycle
@@ -811,6 +812,8 @@
 
         print *, "summed_precipitation (vol*qr)"
         print *, summed_precipitation
+        print *, "summed_deletion (vol*qr)"
+        print *, summed_deletion
 
         deallocate(pid)  ! Deallocate pid to free memory
     end subroutine goners
