@@ -200,8 +200,7 @@ module prec_parcel_interpl
                     !$omp do private(n)
                     do n = 1, n_prec_parcels
                         vel(:, n) = zero
-                        theta(n) = zero
-                        qv(n)    = zero
+                        
                     enddo
                     !$omp end do
                     !$omp end parallel
@@ -211,15 +210,14 @@ module prec_parcel_interpl
                 !$omp do private(n)
                 do n = 1, n_prec_parcels
                     vel(:, n) = zero
-                    theta(n) = zero
-                    qv(n)    = zero
+                   
                 enddo
                 !$omp end do
                 !$omp end parallel
             endif
 
             !$omp parallel default(shared)
-            !$omp do private(n, p, l, points, is, js, weights)
+            !$omp do private(n, l, points, is, js, weights)
             do n = 1, n_prec_parcels
                 points = prec_parcels%position(:, n)
 
@@ -264,11 +262,10 @@ module prec_parcel_interpl
             double precision :: pvol
             ! call start_timer(prec_evap2grid_timer)
             
-            delta_qrg = zero
-            delta_Nrg = zero
+            delta_qrg_substep = zero
             !$omp parallel default(shared)
             !$omp do private(n, i, j, points, pvol, is, js, weights) &
-            !$omp& reduction(+:delta_qrg, delta_Nrg)
+            !$omp& reduction(+:delta_qrg_substep)
             do n = 1, n_prec_parcels
                 
                 pvol = prec_parcels%volume(n)
@@ -288,10 +285,9 @@ module prec_parcel_interpl
                 weights = weights*pvol
                 
     
-                delta_qrg(js:js+1, is:is+1) = delta_qrg(js:js+1, is:is+1) &
-                                   + weights * prec_parcels%delta_qr(n)
-                delta_Nrg(js:js+1, is:is+1) = delta_Nrg(js:js+1, is:is+1) &
-                                   + weights * prec_parcels%Nr(n)
+                delta_qrg_substep(js:js+1, is:is+1) = delta_qrg_substep(js:js+1, is:is+1) &
+                                   + weights * prec_parcels%delta_qr_substep(n)
+                
                 
             enddo
             !$omp end do
@@ -299,38 +295,24 @@ module prec_parcel_interpl
             
             ! apply periodicity
 
-            delta_qrg(:, 0)    = delta_qrg(:, 0) + delta_qrg(:, nx)
-            delta_qrg(:, nx-1) = delta_qrg(:, nx-1) + delta_qrg(:, -1)
-            delta_qrg(:, -1)   = delta_qrg(:, nx-1)
-            delta_qrg(:, nx)   = delta_qrg(:, 0)
+            delta_qrg_substep(:, 0)    = delta_qrg_substep(:, 0) + delta_qrg_substep(:, nx)
+            delta_qrg_substep(:, nx-1) = delta_qrg_substep(:, nx-1) + delta_qrg_substep(:, -1)
+            delta_qrg_substep(:, -1)   = delta_qrg_substep(:, nx-1)
+            delta_qrg_substep(:, nx)   = delta_qrg_substep(:, 0)
 
-            delta_Nrg(:, 0)    = delta_Nrg(:, 0) + delta_Nrg(:, nx)
-            delta_Nrg(:, nx-1) = delta_Nrg(:, nx-1) + delta_Nrg(:, -1)
-            delta_Nrg(:, -1)   = delta_Nrg(:, nx-1)
-            delta_Nrg(:, nx)   = delta_Nrg(:, 0)
+            
 
             ! apply free slip boundary condition
-            delta_qrg(0,  :) = two * delta_qrg(0,  :)
-            delta_qrg(nz, :) = two * delta_qrg(nz, :)
-            delta_qrg(1,    :) = delta_qrg(1,    :) + delta_qrg(-1,   :)
-            delta_qrg(nz-1, :) = delta_qrg(nz-1, :) + delta_qrg(nz+1, :)
-            delta_qrg(0:nz, :) = delta_qrg(0:nz, :) / volg(0:nz, :) !   Note to divide by volg, not prec_volg!
+            delta_qrg_substep(0,  :) = two * delta_qrg_substep(0,  :)
+            delta_qrg_substep(nz, :) = two * delta_qrg_substep(nz, :)
+            delta_qrg_substep(1,    :) = delta_qrg_substep(1,    :) + delta_qrg_substep(-1,   :)
+            delta_qrg_substep(nz-1, :) = delta_qrg_substep(nz-1, :) + delta_qrg_substep(nz+1, :)
+            delta_qrg_substep(0:nz, :) = delta_qrg_substep(0:nz, :) / volg(0:nz, :) !   Note to divide by volg, not prec_volg!
             ! extrapolate to halo grid points (needed to compute
             ! z derivative used for the time step)
-            delta_qrg(-1,   :) = two * delta_qrg(0,  :) - delta_qrg(1, :)
-            delta_qrg(nz+1, :) = two * delta_qrg(nz, :) - delta_qrg(nz-1, :)              
-
-            delta_Nrg(0,  :) = two * delta_Nrg(0,  :)
-            delta_Nrg(nz, :) = two * delta_Nrg(nz, :)
-            delta_Nrg(1,    :) = delta_Nrg(1,    :) + delta_Nrg(-1,   :)
-            delta_Nrg(nz-1, :) = delta_Nrg(nz-1, :) + delta_Nrg(nz+1, :)
-            delta_Nrg(0:nz, :) = delta_Nrg(0:nz, :) / volg(0:nz, :) !   Note to divide by volg, not prec_volg!
-            ! extrapolate to halo grid points (needed to compute
-            ! z derivative used for the time step)
-            delta_Nrg(-1,   :) = two * delta_Nrg(0,  :) - delta_Nrg(1, :)
-            delta_Nrg(nz+1, :) = two * delta_Nrg(nz, :) - delta_Nrg(nz-1, :)    
-
-            ! call stop_timer(prec_evap2grid_timer)
+            delta_qrg_substep(-1,   :) = two * delta_qrg_substep(0,  :) - delta_qrg_substep(1, :)
+            delta_qrg_substep(nz+1, :) = two * delta_qrg_substep(nz, :) - delta_qrg_substep(nz-1, :)            
+            
         
         
         

@@ -194,6 +194,10 @@ module parcel_correction
         !$omp do private(n, is, js, weights)
         do n = 1, n_parcels
             call bilinear(parcels%position(:, n), is, js, weights)
+            if (js > 160) then
+                print *, "parcels%position(:, n) = ", parcels%position(:, n)
+                print *, "is, js = ", is, js
+            endif
 
             parcels%position(1, n) = parcels%position(1, n)             &
                                    + sum(weights * ud(js:js+1, is:is+1))

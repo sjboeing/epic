@@ -87,6 +87,7 @@
         double precision, allocatable, dimension(:) :: qr
         double precision, allocatable, dimension(:) :: Nr ! droplet number
         double precision, allocatable, dimension(:) :: delta_qr ! delta_qr/dt
+        double precision, allocatable, dimension(:) :: delta_qr_substep ! delta_qr/dt
         double precision, allocatable, dimension(:) :: delta_Nr ! delta_Nr/dt
         double precision, allocatable, dimension(:) :: qv ! for evaporation calculations
         double precision, allocatable, dimension(:) :: theta ! for evaporation calculations 
@@ -253,6 +254,7 @@
             allocate(this%qr(num))
             allocate(this%Nr(num))
             allocate(this%delta_qr(num))
+            allocate(this%delta_qr_substep(num))
             allocate(this%delta_nr(num))
             allocate(this%qv(num))
             allocate(this%theta(num))
@@ -263,6 +265,7 @@
             call this%register_attribute(this%qr, "qr", "kg/kg")
             call this%register_attribute(this%Nr, "Nr", "/m^3")
             call this%register_attribute(this%delta_qr, "delta_qr", "kg/s")
+            call this%register_attribute(this%delta_qr_substep, "delta_qr_substep", "kg/s")
             call this%register_attribute(this%delta_nr, "delta_nr", "/s")
             call this%register_attribute(this%qv, "qv", "kg/kg")
             call this%register_attribute(this%theta, "theta", "K")
@@ -279,6 +282,7 @@
             call try_deallocate(this%qr)
             call try_deallocate(this%Nr)
             call try_deallocate(this%delta_qr)
+            call try_deallocate(this%delta_qr_substep)
             call try_deallocate(this%delta_nr)
             call try_deallocate(this%qv)
             call try_deallocate(this%theta)
@@ -301,6 +305,7 @@
             call resize_array(this%qr, new_size, this%local_num)
             call resize_array(this%Nr, new_size, this%local_num)
             call resize_array(this%delta_qr, new_size, this%local_num)
+            call resize_array(this%delta_qr_substep, new_size, this%local_num)
             call resize_array(this%delta_nr, new_size, this%local_num)
             call resize_array(this%qv, new_size, this%local_num)
             call resize_array(this%theta, new_size, this%local_num)
@@ -311,6 +316,7 @@
             call this%reset_attribute(this%qr, "qr")
             call this%reset_attribute(this%Nr, "Nr")
             call this%reset_attribute(this%delta_qr, "delta_qr")
+            call this%reset_attribute(this%delta_qr_substep, "delta_qr_substep")
             call this%reset_attribute(this%delta_nr, "delta_nr")
             call this%reset_attribute(this%qv, "qv")
             call this%reset_attribute(this%theta, "theta")
@@ -605,7 +611,7 @@
                 temp_low=temp-L_v_over_c_p*ql_start
                 qsat_helper = 0.01d0*press*eval_spline(esat_spline, temp_low) - qsa4
                 if(qt_start*qsat_helper < qsa1) then ! Evaporate everything, if needed at all
-                   if(ql_start>0.0d0) then
+                   if(ql_start>0.0d0 .or. ql_start <0.0d0) then
                       this%theta(n)=theta_start-(L_v_over_c_p/exn)*ql_start
                       this%qv(n)=qt_start
                       this%ql(n)=0.0d0
@@ -762,7 +768,8 @@
             
             abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
             
-            this%delta_qr(n) = -(1.0-this%qv(n)/ws)*vent_r*abliq
+            this%delta_qr(n) = this%delta_qr(n)-(1.0-this%qv(n)/ws)*vent_r*abliq
+            this%delta_qr_substep(n) = -(1.0-this%qv(n)/ws)*vent_r*abliq
             
            
             

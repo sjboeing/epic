@@ -10,9 +10,9 @@ module ls_rk4
     use parcel_bc
     use rk4_utils, only: get_B, get_time_step
     use utils, only : write_step
-    use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add
+    use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add,sum_field
     use prec_parcel_interpl, only : prec_par2grid, prec_grid2par, prec_grid2par_add, prec_evap2grid
-    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag,qvg,qrg
+    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag,qvg,qrg,qlg,volg
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_diagnostics, only : calculate_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
@@ -62,7 +62,16 @@ module ls_rk4
             if(microphysics%l_precipitation) then
                 call prec_par2grid(prec_parcels)
             end if
-        !----------------------------------------
+        
+            if(microphysics%l_precipitation) then
+                print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg+qrg)*volg)
+                print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg+qrg))
+                print *, "qrg*volg=", sum_field(qrg*volg)
+                print *, "qrg=", sum_field(qrg)
+            endif
+            print *, "(qvg+qlg)*volg=", sum_field((qvg+qlg)*volg)
+            print *, "(qvg+qlg)=", sum_field((qvg+qlg))
+
             ! need to be called in order to set initial time step;
             ! this is also needed for the first ls-rk4 substep
             call vor2vel(vortg, velog, velgradg)
@@ -86,6 +95,7 @@ module ls_rk4
                 endif
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
+                    prec_parcels%delta_qr = zero
                     call prec_parcels%evaporation()
                      !Change 3: add evap2grid
                     call prec_evap2grid(prec_parcels)

@@ -33,6 +33,7 @@ module fields
         qrg,         & ! mixing ratio (rain)
         Nrg,         & ! rain droplet number
         delta_qrg,        & ! change in rain mixing ratio
+        delta_qrg_substep, & ! change in rain mixing ratio per substep
         delta_Nrg,         & ! change in rain droplet number
 #ifndef NDEBUG
         sym_volg,  &   ! symmetry volume (debug mode only)
@@ -113,6 +114,7 @@ module fields
 
             allocate(qrg(-1:nz+1, -1:nx))
             allocate(delta_qrg(-1:nz+1, -1:nx))
+            allocate(delta_qrg_substep(-1:nz+1, -1:nx))
             allocate(Nrg(-1:nz+1, -1:nx))
             allocate(delta_Nrg(-1:nz+1, -1:nx))
             allocate(prec_volg(-1:nz+1, -1:nx))
@@ -140,6 +142,7 @@ module fields
                 call prec_field_alloc
                 qrg = zero
                 delta_qrg = zero
+                delta_qrg_substep = zero
                 Nrg = zero
                 delta_Nrg = zero
                 prec_volg = zero

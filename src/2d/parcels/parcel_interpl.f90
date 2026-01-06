@@ -619,9 +619,13 @@ module parcel_interpl
                                     + sum(weight * velgradg(js:js+1, is:is+1, l))
                     end do
                     vor(1, n) = vor(1, n) + sum(weight * vtend(js:js+1, is:is+1))
+
+                    if(allocated(delta_qrg_substep)) then
+                        ! No add ability as evaporation called within ls_rk4
+                        delta_ql(n) = delta_ql(n) - sum(weight * delta_qrg_substep(js:js+1, is:is+1))
+                    endif
                 enddo
-                ! No add ability as evaporation called within ls_rk4
-                delta_ql(n) = -sum(weights * delta_qrg(js:js+1, is:is+1))
+                
                 
             enddo
             !$omp end do
@@ -732,4 +736,33 @@ module parcel_interpl
             field_sum = field_sum+0.5*sum(field(0, 0:nx-1))
             field_sum = field_sum+0.5*sum(field(nz, 0:nx-1))
         end function sum_field
+
+    subroutine write_water_totals(time)
+    
+
+        real, intent(in) :: time
+        integer, save :: unit = -1
+        logical, save :: first_call = .true.
+        real :: vapor, liquid, rain
+
+        ! External function provided elsewhere
+        real, external :: get_water
+
+        ! Open file and write header only once
+        if (first_call) then
+            unit = 20
+            open(unit=unit, file='water_totals.txt', status='replace', action='write')
+            write(unit, '(A)') 'time vapor liquid rain'
+            first_call = .false.
+        end if
+
+        ! Get water totals for current timestep
+        vapor  = sum_field(qvg)
+        liquid = sum_field(qlg)
+        rain    = sum_field(qrg)
+
+        ! Write timestep data
+        write(unit, '(F10.3, 3E15.7)') time, vapor, liquid, rain
+
+end subroutine write_water_totals
 end module parcel_interpl
