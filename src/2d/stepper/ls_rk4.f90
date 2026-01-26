@@ -63,14 +63,14 @@ module ls_rk4
                 call prec_par2grid(prec_parcels)
             end if
         
-            if(microphysics%l_precipitation) then
-                print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg+qrg)*volg)
-                print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg+qrg))
-                print *, "qrg*volg=", sum_field(qrg*volg)
-                print *, "qrg=", sum_field(qrg)
-            endif
-            print *, "(qvg+qlg)*volg=", sum_field((qvg+qlg)*volg)
-            print *, "(qvg+qlg)=", sum_field((qvg+qlg))
+            ! if(microphysics%l_precipitation) then
+            !     print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg+qrg)*volg)
+            !     print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg+qrg))
+            !     print *, "qrg*volg=", sum_field(qrg*volg)
+            !     print *, "qrg=", sum_field(qrg)
+            ! endif
+            ! print *, "(qvg+qlg)*volg=", sum_field((qvg+qlg)*volg)
+            ! print *, "(qvg+qlg)=", sum_field((qvg+qlg))
 
             ! need to be called in order to set initial time step;
             ! this is also needed for the first ls-rk4 substep
@@ -96,7 +96,7 @@ module ls_rk4
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
                     prec_parcels%delta_qr = zero
-                    call prec_parcels%evaporation()
+                    call prec_parcels%evaporation(microphysics%l_single_droplet_size,microphysics%l_homogeneous)
                      !Change 3: add evap2grid
                     call prec_evap2grid(prec_parcels)
                 endif
@@ -191,7 +191,7 @@ module ls_rk4
                     endif
                     if (microphysics%l_evaporation) then
                         prec_parcels%local_num = n_prec_parcels
-                        call prec_parcels%evaporation()
+                        call prec_parcels%evaporation(microphysics%l_single_droplet_size,microphysics%l_homogeneous)
                         !Change 3: add evap2grid
                         call prec_evap2grid(prec_parcels)
                     endif

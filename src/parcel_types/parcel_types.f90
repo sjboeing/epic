@@ -5,6 +5,7 @@
     use timer, only : start_timer, stop_timer
     use parcel_ellipsoid
     use spline_module
+    
 
     implicit none
 
@@ -744,9 +745,10 @@
 
     end subroutine sedimentation
 
-    subroutine evaporation(this)
+    subroutine evaporation(this,l_single_droplet_size,l_homogeneous)
         class(prec_parcel_type), intent(inout) :: this
-        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press
+        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press,D,vterm
+        logical, intent(in) :: l_single_droplet_size,l_homogeneous
         integer :: n
         
         !$omp parallel do default(shared) private(n,exn,temp,ro_air,slope,vent_r,abliq,ws,press)
@@ -755,25 +757,38 @@
             press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
             exn = (press/p_ref)**(r_d/c_p)
             temp = this%theta(n)*exn
-            
             ro_air = press/(r_d*temp)
             ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
-            slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
-            vent_r = two*pi*(this%nr(n))*ro_air* &
+            abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
+            
+            
+            
+            if (l_single_droplet_size .eqv. .true.) then
+                D = ((rho_air/rho_w)*(six*fpi*this%qr(n)/this%nr(n)))**(f13)
+                vterm = (a1*(D**(b1))*(exp(-f1*D)))+a2*(D**(b2))* (exp(-f2*D))*(rho_ref/rho_air)**(f12)
+                vterm = max(0.0, vterm)
+                vent_r = 2*pi*D*(0.78 + 0.31*(sc**(f13))*(((vterm*D*rho_air)/visc)**(f12)))
+                this%delta_qr_substep(n) =  &
+                    -(1.0 - this%qv(n)/ws) * vent_r * abliq * this%nr(n) 
+            else
+               slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13)) 
+               vent_r = two*pi*(this%nr(n))*ro_air* &
                     (0.78*((one+mu)/(slope)) &
                     +  0.31*((a1*ro_air/visc)**(f12))*(sc**(f13))*((rho_ref/ro_air)**(f14))  &
                     * (gamma((f12*b1 +mu +f52))/gamma((1+mu))) &
                     *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
-                    *((slope)**(-f12*b1 -f32)))
+                    *((slope)**(-f12*b1 -f32))) 
+                this%delta_qr_substep(n) = -(1.0-this%qv(n)/ws)*vent_r*abliq
+            end if
+            this%delta_qr(n) = this%delta_qr(n)+this%delta_qr_substep(n)
             
-            abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
+
+            if (l_homogeneous .eqv. .true.) then
+                this%delta_nr(n) = 0.0
+            else
+                this%delta_nr(n) = this%delta_qr_substep(n)*(this%nr(n)/this%qr(n))
+            end if
             
-            this%delta_qr(n) = this%delta_qr(n)-(1.0-this%qv(n)/ws)*vent_r*abliq
-            this%delta_qr_substep(n) = -(1.0-this%qv(n)/ws)*vent_r*abliq
-            
-           
-            
-            this%delta_nr(n) =0.0
             
             
         end do
@@ -781,7 +796,7 @@
         
     end subroutine evaporation
 
-  subroutine goners(this)
+    subroutine goners(this)
         class(prec_parcel_type), intent(inout) :: this
         integer, allocatable :: pid(:)  ! Declare pid as an allocatable array
         integer :: n_del

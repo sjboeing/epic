@@ -120,7 +120,7 @@ module utils
                 endif
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
-                    call prec_parcels%evaporation()
+                    call prec_parcels%evaporation(microphysics%l_single_droplet_size,microphysics%l_homogeneous)
                      !Change 3: add evap2grid
                     call prec_evap2grid(prec_parcels)
                 endif
