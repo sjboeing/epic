@@ -87,9 +87,6 @@ module prec_parcel_interpl
                 Nrg(js:js+1, is:is+1) = Nrg(js:js+1, is:is+1) &
                                    + weights * prec_parcels%Nr(n)
 
-
-
-
             enddo
             !$omp end do
             !$omp end parallel
@@ -268,6 +265,7 @@ module prec_parcel_interpl
 
                 points = prec_parcels%position(:, n)
 
+
                 call get_index(prec_parcels%position(:, n), i, j)
                 i = mod(i + nx, nx)
 
@@ -280,9 +278,9 @@ module prec_parcel_interpl
 
                 weights = weights*pvol
 
-
                 delta_qrg_substep(js:js+1, is:is+1) = delta_qrg_substep(js:js+1, is:is+1) &
                                    + weights * prec_parcels%delta_qr_substep(n)
+
             enddo
             !$omp end do
             !$omp end parallel
@@ -294,16 +292,15 @@ module prec_parcel_interpl
             delta_qrg_substep(:, -1)   = delta_qrg_substep(:, nx-1)
             delta_qrg_substep(:, nx)   = delta_qrg_substep(:, 0)
 
-            ! apply free slip boundary condition
             delta_qrg_substep(0,  :) = two * delta_qrg_substep(0,  :)
             delta_qrg_substep(nz, :) = two * delta_qrg_substep(nz, :)
             delta_qrg_substep(1,    :) = delta_qrg_substep(1,    :) + delta_qrg_substep(-1,   :)
             delta_qrg_substep(nz-1, :) = delta_qrg_substep(nz-1, :) + delta_qrg_substep(nz+1, :)
             delta_qrg_substep(0:nz, :) = delta_qrg_substep(0:nz, :) / volg(0:nz, :) !   Note to divide by volg, not prec_volg!
-            ! extrapolate to halo grid points (needed to compute
+            ! set halo grid points equal to interior for conservation purposes (needed to compute
             ! z derivative used for the time step)
-            delta_qrg_substep(-1,   :) = two * delta_qrg_substep(0,  :) - delta_qrg_substep(1, :)
-            delta_qrg_substep(nz+1, :) = two * delta_qrg_substep(nz, :) - delta_qrg_substep(nz-1, :)
+            delta_qrg_substep(-1,   :) = delta_qrg_substep(1, :)
+            delta_qrg_substep(nz+1, :) = delta_qrg_substep(nz-1, :)
 
         end subroutine prec_evap2grid
 

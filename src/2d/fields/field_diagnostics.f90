@@ -7,7 +7,9 @@ module field_diagnostics
     use fields
     use timer, only : start_timer, stop_timer
     use physics, only : ape_calculation
+    use parcel_interpl, only: sum_field
     use ape_density, only : ape_den
+    use options, only : microphysics
     implicit none
 
     integer :: field_stats_timer
@@ -20,6 +22,14 @@ module field_diagnostics
                         avg_nspar,  &       ! average num small parcels per cell
                         keg,        &       ! domain-averaged kinetic energy calculated on the grid
                         apeg                ! domain-averaged available potential energy on the grid
+
+#ifndef ENABLE_DRY_MODE
+    double precision :: int_qv, &
+                        int_ql, &
+                        int_qr, &
+                        int_qall
+#endif
+
 #ifndef NDEBUG
     double precision :: max_vol_sym_err
 #endif
@@ -75,6 +85,18 @@ module field_diagnostics
 
 #ifndef NDEBUG
             max_vol_sym_err = maxval(abs(sym_volg(0:nz, 0:nx-1)))
+#endif
+
+#ifndef ENABLE_DRY_MODE
+           int_qv=sum_field(qvg*volg)
+           int_ql=sum_field(qlg*volg)
+           if(microphysics%l_precipitation) then
+             int_qr=sum_field(qrg*volg)
+             int_qall=sum_field((qvg+qlg+qrg)*volg)
+           else
+             int_qr=0.0d0
+             int_qall=sum_field((qvg+qlg)*volg)
+           endif
 #endif
 
             call stop_timer(field_stats_timer)

@@ -15,9 +15,11 @@ program epic2d
                                   lapl_corr_timer,        &
                                   grad_corr_timer
     use parcel_diagnostics, only : parcel_stats_timer
+    use prec_parcel_diagnostics, only : prec_parcel_stats_timer
     use parcel_netcdf, only : parcel_io_timer
     use prec_parcel_netcdf, only : prec_parcel_io_timer
     use parcel_diagnostics_netcdf, only : parcel_stats_io_timer
+    use prec_parcel_diagnostics_netcdf, only : prec_parcel_stats_io_timer
     use fields
     use field_netcdf, only : field_io_timer
     use field_diagnostics, only : field_stats_timer
@@ -67,9 +69,11 @@ program epic2d
             call register_timer('gradient correction', grad_corr_timer)
             call register_timer('parcel initialisation', init_timer)
             call register_timer('parcel diagnostics', parcel_stats_timer)
+            call register_timer('prec parcel diagnostics', prec_parcel_stats_timer)
             call register_timer('parcel I/O', parcel_io_timer)
             call register_timer('prec parcel I/O', prec_parcel_io_timer)
             call register_timer('parcel diagnostics I/O', parcel_stats_io_timer)
+            call register_timer('prec_parcel diagnostics I/O', prec_parcel_stats_io_timer)
             call register_timer('field I/O', field_io_timer)
             call register_timer('field diagnostics', field_stats_timer)
             call register_timer('field diagnostics I/O', field_stats_io_timer)

@@ -8,5 +8,7 @@ install-sh
 missing
 py-compile
 configure~
+*.pyc
+*.m4
 src/Makefile.in
 results/

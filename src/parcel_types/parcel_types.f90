@@ -28,6 +28,7 @@
     double precision, parameter :: f1 = 195
     double precision, parameter :: f2 = 4085.35
     double precision, parameter :: mu = 2.5
+    double precision, parameter :: eps_rain = 1.0e-20
 
     double precision :: summed_precipitation = 0.0, summed_deletion = 0.0
 
@@ -102,6 +103,7 @@
             procedure :: sedimentation
             procedure :: evaporation
             procedure :: goners
+            procedure :: full_evap
 
             ! get_buoyancy added here
     end type
@@ -721,17 +723,21 @@
         if(l_single_droplet_size) then
             !$omp parallel do default(shared) private(n, D, vterm)
             do n = 1, this%local_num
-                    D = ((rho_air/rho_w)*(six*fpi*this%qr(n)/this%nr(n)))**(f13)
-                    vterm = (a1*(D**(b1))*(exp(-f1*D)))+a2*(D**(b2))* (exp(-f2*D))*(rho_ref/rho_air)**(f12)
-                    vterm = max(0.0, vterm)
-                    this%delta_pos(this%z_dim, n) = this%delta_pos(this%z_dim, n) - vterm
+                if(this%qr(n)<eps_rain) then
+                    cycle
+                endif
+                D = ((rho_air/rho_w)*(six*fpi*this%qr(n)/this%nr(n)))**(f13)
+                vterm = (a1*(D**(b1))*(exp(-f1*D)))+a2*(D**(b2))* (exp(-f2*D))*(rho_ref/rho_air)**(f12)
+                vterm = max(0.0, vterm)
+                this%delta_pos(this%z_dim, n) = this%delta_pos(this%z_dim, n) - vterm
             end do
             !$omp end parallel do
         else
             !$omp parallel do default(shared) private(n,slope,asr1,asr2, vterm)
             do n = 1, this%local_num
-
-
+                if(this%qr(n)<eps_rain) then
+                    cycle
+                endif
                 slope = (fpi6*(rho_w/rho_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
                 !These are the mass weighted integrals for abel and shipway terminal velocity
                 asr1 = a1*((rho_ref/rho_air)**(f12))*(slope**(one+mu+three)*(slope+f1)**(-(one+mu+three+b1))) &
@@ -746,46 +752,76 @@
 
     end subroutine sedimentation
 
-    subroutine evaporation(this)
+    subroutine evaporation(this, dt_eff)
         class(prec_parcel_type), intent(inout) :: this
-        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press
+        double precision, intent(in) :: dt_eff
+        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press, evap_term
         integer :: n
 
-        !$omp parallel do default(shared) private(n,exn,temp,ro_air,slope,vent_r,abliq,ws,press)
+        !$omp parallel do default(shared) private(n,exn,temp,ro_air,slope,vent_r,abliq,ws,press, evap_term)
         do n = 1, this%local_num
 
-            press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
-            exn = (press/p_ref)**(r_d/c_p)
-            temp = this%theta(n)*exn
+            ! take into account there may be other processes
+            ! eventually also evaporate nr
 
-            ro_air = press/(r_d*temp)
-            ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
-            slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
-            vent_r = two*pi*(this%nr(n))*ro_air* &
+            if(this%qr(n)>eps_rain) then
+
+               press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
+               exn = (press/p_ref)**(r_d/c_p)
+               temp = this%theta(n)*exn
+
+               ro_air = press/(r_d*temp)
+               ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
+               slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
+               vent_r = two*pi*(this%nr(n))*ro_air* &
                     (0.78*((one+mu)/(slope)) &
                     +  0.31*((a1*ro_air/visc)**(f12))*(sc**(f13))*((rho_ref/ro_air)**(f14))  &
                     * (gamma((f12*b1 +mu +f52))/gamma((1+mu))) &
                     *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
                     *((slope)**(-f12*b1 -f32)))
 
-            abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
+                abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
 
-            this%delta_qr(n) = this%delta_qr(n) - (1.0-this%qv(n)/ws)*vent_r*abliq
-            this%delta_qr_substep(n) = - (1.0-this%qv(n)/ws)*vent_r*abliq
+                evap_term = (1.0-this%qv(n)/ws)*vent_r*abliq
+            else
+                evap_term= 0.0
+            endif
 
-            this%delta_nr(n) =0.0
+            this%delta_qr(n) = this%delta_qr(n) - evap_term
 
-
+            ! correct if limiter hit to prevent negative qr
+            if(this%delta_qr(n)*dt_eff <-this%qr(n)) then
+               ! adding this for final write where dt not estabilished
+               ! at least in current code
+               if(dt_eff>0.0d0) then 
+                   ! Redefine delta_qr
+                   ! Ensure delta_qr_substep consistent
+                   this%delta_qr_substep(n) = - this%qr(n)/dt_eff - (this%delta_qr(n) + evap_term)
+                   this%delta_qr(n)=-this%qr(n)/dt_eff
+               else
+                   this%delta_qr_substep(n) = -evap_term
+               endif
+            else
+               this%delta_qr_substep(n) = -evap_term
+            endif
+            
+            this%delta_nr(n) =this%delta_nr(n)
         end do
         !$omp end parallel do
 
     end subroutine evaporation
 
-  subroutine goners(this)
+    subroutine goners(this, step, n_steps, cas, cbs, dt)
         class(prec_parcel_type), intent(inout) :: this
+        integer, intent(in) :: step
+        integer, intent(in) :: n_steps
+        double precision, intent(in) :: cas(n_steps)
+        double precision, intent(in) :: cbs(n_steps)
+        double precision, intent(in) :: dt
         integer, allocatable :: pid(:)  ! Declare pid as an allocatable array
         integer :: n_del
         integer :: n
+        integer :: this_step
 
         n_del = 0
         allocate(pid(0:this%local_num))  ! Allocate pid with the size of local_num
@@ -794,15 +830,43 @@
         ! Replace this by a reduction loop first
         do n = 1, this%local_num
             if (this%position(this%z_dim, n) <= 0) then
+                ! complete the time step for this parcel with no further tendencies assumed
+                if(step<n_steps) then
+                   do this_step=step, n_steps-1
+                     this%delta_qr(n)=cas(this_step)*this%delta_qr(n)
+                     this%qr(n)=this%qr(n)+cbs(this_step+1)*dt*this%delta_qr(n)
+                   end do
+                endif
                 summed_precipitation=summed_precipitation+this%volume(n)*this%qr(n)
                 n_del = n_del + 1
                 pid(n_del) = n
-                cycle
-            else if (this%qr(n) <= 0) then
+           endif
+        end do
+
+        if (n_del > 0) then
+            call this%delete(pid=pid(0:n_del), n_del=n_del)
+        end if
+        deallocate(pid)  ! Deallocate pid to free memory
+
+    end subroutine goners
+
+    subroutine full_evap(this)
+        class(prec_parcel_type), intent(inout) :: this
+        integer, allocatable :: pid(:)  ! Declare pid as an allocatable array
+        integer :: n_del
+        integer :: n
+        integer :: this_step
+
+        n_del = 0
+        allocate(pid(0:this%local_num))  ! Allocate pid with the size of local_num
+        pid=0
+
+        ! Replace this by a reduction loop first
+        do n = 1, this%local_num
+            if (this%qr(n) < eps_rain) then
                 summed_deletion=summed_deletion+this%volume(n)*this%qr(n)
                 n_del = n_del + 1
                 pid(n_del) = n
-                cycle
             end if
         end do
 
@@ -810,12 +874,8 @@
             call this%delete(pid=pid(0:n_del), n_del=n_del)
         end if
 
-        print *, "summed_precipitation (vol*qr)"
-        print *, summed_precipitation
-        print *, "summed_deletion (vol*qr)"
-        print *, summed_deletion
-
         deallocate(pid)  ! Deallocate pid to free memory
-    end subroutine goners
+    end subroutine full_evap
+
 
 end module

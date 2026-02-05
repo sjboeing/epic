@@ -15,6 +15,7 @@ module ls_rk4
     use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag, qvg, qrg, qlg, volg
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_diagnostics, only : calculate_parcel_diagnostics
+    use prec_parcel_diagnostics, only : calculate_prec_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
     use parameters, only : nx, nz
     use options, only : microphysics
@@ -51,7 +52,6 @@ module ls_rk4
             double precision, intent(inout) :: t
             double precision                :: dt
             integer                         :: n
-            print *, "start of RK4 loop: here the volume is homogenised"
 
             select type (parcels)
             type is (idealised_parcel_type)
@@ -63,15 +63,6 @@ module ls_rk4
             if(microphysics%l_precipitation) then
                 call prec_par2grid(prec_parcels)
             end if
-
-            if(microphysics%l_precipitation) then
-                print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg+qrg)*volg)
-                print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg+qrg))
-                print *, "qrg*volg=", sum_field(qrg*volg)
-                print *, "qrg=", sum_field(qrg)
-            endif
-            print *, "(qvg+qlg)*volg=", sum_field((qvg+qlg)*volg)
-            print *, "(qvg+qlg)=", sum_field((qvg+qlg))
 
             ! need to be called in order to set initial time step;
             ! this is also needed for the first ls-rk4 substep
@@ -98,7 +89,7 @@ module ls_rk4
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
                     prec_parcels%delta_qr = zero
-                    call prec_parcels%evaporation()
+                    call prec_parcels%evaporation(cbs(1)*dt)
                      !Change 3: add evap2grid
                     call prec_evap2grid(prec_parcels)
                 endif
@@ -115,13 +106,16 @@ module ls_rk4
             !Change 1: Move diagnostics
             call calculate_parcel_diagnostics(parcels%delta_pos)
 
+            if(microphysics%l_precipitation) then
+                call calculate_prec_parcel_diagnostics
+            endif
+
             call calculate_field_diagnostics
 
             call write_step(t)
 
 
             do n = 1, 4
-                print *, "substep", n
                 call ls_rk4_substep(dt, n)
 
 !---------------par2grid------------------
@@ -135,16 +129,6 @@ module ls_rk4
                 if(microphysics%l_precipitation) then
                     call prec_par2grid(prec_parcels)
                 end if
-
-                if(microphysics%l_precipitation) then
-                    print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg+qrg)*volg)
-                    print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg+qrg))
-                    print *, "qrg*volg=", sum_field(qrg*volg)
-                    print *, "qrg=", sum_field(qrg)
-                endif
-                print *, "(qvg+qlg)*volg=", sum_field((qvg+qlg)*volg)
-                print *, "(qvg+qlg)=", sum_field((qvg+qlg))
-
 
 !----------------------------------------
             enddo
@@ -205,7 +189,7 @@ module ls_rk4
                     endif
                     if (microphysics%l_evaporation) then
                         prec_parcels%local_num = n_prec_parcels
-                        call prec_parcels%evaporation()
+                        call prec_parcels%evaporation(cbs(step)*dt)
                         !Change 3: add evap2grid
                         call prec_evap2grid(prec_parcels)
                     endif
@@ -258,7 +242,7 @@ module ls_rk4
                 !$omp end parallel do
 
                 prec_parcels%local_num = n_prec_parcels
-                call prec_parcels%goners
+                call prec_parcels%goners(step, 5, cas, cbs, dt)
                 n_prec_parcels = prec_parcels%local_num
             endif
 
@@ -266,7 +250,10 @@ module ls_rk4
 
 
             if (step == 5) then
-               return
+                prec_parcels%local_num = n_prec_parcels
+                call prec_parcels%full_evap
+                n_prec_parcels = prec_parcels%local_num
+                return
             endif
 
             call start_timer(rk4_timer)
@@ -294,13 +281,5 @@ module ls_rk4
             call stop_timer(rk4_timer)
 
         end subroutine ls_rk4_substep
-
-        function sum_field(field) result(field_sum)
-            double precision, intent(in) :: field(-1:nz+1,-1:nx)
-            double precision :: field_sum
-            field_sum = sum(field(1:nz-1, 0:nx-1))
-            field_sum = field_sum+0.5*sum(field(0, 0:nx-1))
-            field_sum = field_sum+0.5*sum(field(nz, 0:nx-1))
-        end function sum_field
 
 end module ls_rk4
