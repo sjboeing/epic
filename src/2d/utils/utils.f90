@@ -1,5 +1,5 @@
 module utils
-    use constants, only : one
+    use constants, only : zero, one
     use options, only : field_file          &
                       , field_tol           &
                       , output              &
@@ -130,7 +130,7 @@ module utils
                 endif
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
-                    call prec_parcels%evaporation(0.0d0)
+                    call prec_parcels%evaporation(zero, microphysics%l_single_droplet_size, microphysics%l_homogeneous)
                      !Change 3: add evap2grid
                     call prec_evap2grid(prec_parcels)
                 endif

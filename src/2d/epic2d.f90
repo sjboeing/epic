@@ -35,7 +35,7 @@ program epic2d
     use utils, only : write_last_step, setup_output_files        &
                     , setup_restart, setup_domain_and_parameters &
                     , setup_parcels, setup_prec_parcels
-    use parcel_types, only : saturation_adjustment_timer
+    use parcel_types, only : saturation_adjustment_timer, evaporation_timer, sedimentation_timer
 
     implicit none
 
@@ -86,6 +86,8 @@ program epic2d
 #ifndef NDEBUG
             call register_timer('symmetric vol2grid', sym_vol2grid_timer)
 #endif
+            call register_timer('evaporation', evaporation_timer)
+            call register_timer('sedimentation', sedimentation_timer)
 
             call start_timer(epic_timer)
 

@@ -89,7 +89,7 @@ module ls_rk4
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
                     prec_parcels%delta_qr = zero
-                    call prec_parcels%evaporation(cbs(1)*dt)
+                    call prec_parcels%evaporation(cbs(1)*dt, microphysics%l_single_droplet_size, microphysics%l_homogeneous)
                      !Change 3: add evap2grid
                     call prec_evap2grid(prec_parcels)
                 endif
@@ -189,7 +189,7 @@ module ls_rk4
                     endif
                     if (microphysics%l_evaporation) then
                         prec_parcels%local_num = n_prec_parcels
-                        call prec_parcels%evaporation(cbs(step)*dt)
+                        call prec_parcels%evaporation(cbs(step)*dt, microphysics%l_single_droplet_size, microphysics%l_homogeneous)
                         !Change 3: add evap2grid
                         call prec_evap2grid(prec_parcels)
                     endif
@@ -244,6 +244,15 @@ module ls_rk4
                 prec_parcels%local_num = n_prec_parcels
                 call prec_parcels%goners(step, 5, cas, cbs, dt)
                 n_prec_parcels = prec_parcels%local_num
+
+                ! Raindrop size limiter and negative Nr correction currently set to 1 gram per droplet
+                !$omp parallel do default(shared) private(n)
+                do n = 1, n_prec_parcels
+                    if(prec_parcels%nr(n)<prec_parcels%qr(n)/microphysics%Nr_limiter) then
+                       prec_parcels%nr(n)=prec_parcels%qr(n)/microphysics%Nr_limiter
+                    endif
+                enddo
+                !$omp end parallel do
             endif
 
             call stop_timer(rk4_timer)
