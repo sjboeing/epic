@@ -4,7 +4,7 @@ try:
     import math 
 
     nx = 1280
-    nz = 1000
+    nz = 500
     # Set the origin
     origin = np.array((0.0, 0.0))
     # Set the extent
