@@ -737,32 +737,34 @@ module parcel_interpl
             field_sum = field_sum+0.5*sum(field(nz, 0:nx-1))
         end function sum_field
 
-    subroutine write_water_totals(time)
+!     subroutine write_water_totals(time)
     
 
-        real, intent(in) :: time
-        integer, save :: unit = -1
-        logical, save :: first_call = .true.
-        real :: vapor, liquid, rain
+!         real, intent(in) :: time
+!         integer, save :: unit = -1
+!         logical, save :: first_call = .true.
+!         real :: vapor, liquid, rain
 
-        ! External function provided elsewhere
-        real, external :: get_water
+!         ! External function provided elsewhere
+!         real, external :: get_water
 
-        ! Open file and write header only once
-        if (first_call) then
-            unit = 20
-            open(unit=unit, file='water_totals.txt', status='replace', action='write')
-            write(unit, '(A)') 'time vapor liquid rain'
-            first_call = .false.
-        end if
+!         ! ! Open file and write header only once
+!         ! if (first_call) then
+!         !     unit = 20
+!         !     open(unit=unit, file='water_totals.txt', status='replace', action='write')
+!         !     write(unit, '(A)') 'time vapor liquid rain'
+!         !     first_call = .false.
+!         ! end if
 
-        ! Get water totals for current timestep
-        vapor  = sum_field(qvg)
-        liquid = sum_field(qlg)
-        rain    = sum_field(qrg)
+!         ! ! Get water totals for current timestep
+!         ! vapor  = sum_field(qvg)
+!         ! liquid = sum_field(qlg)
+!         ! if (allocated(qrg)) then
+!         !     rain    = sum_field(qrg)
+!         ! end if 
 
-        ! Write timestep data
-        write(unit, '(F10.3, 3E15.7)') time, vapor, liquid, rain
+!         ! ! Write timestep data
+!         ! write(unit, '(F10.3, 3E15.7)') time, vapor, liquid, rain
 
-end subroutine write_water_totals
+! end subroutine write_water_totals
 end module parcel_interpl

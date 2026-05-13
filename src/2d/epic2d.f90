@@ -23,7 +23,7 @@ program epic2d
     use field_diagnostics, only : field_stats_timer
     use field_diagnostics_netcdf, only : field_stats_io_timer
     use tri_inversion, only : init_inversion, vor2vel_timer, vtend_timer
-    use parcel_interpl, only : grid2par_timer, par2grid_timer,sum_field,write_water_totals
+    use parcel_interpl, only : grid2par_timer, par2grid_timer,sum_field
     use prec_parcel_interpl, only : prec_grid2par_timer, prec_par2grid_timer
 #ifndef NDEBUG
     use parcel_interpl, only : sym_vol2grid_timer
@@ -119,7 +119,7 @@ program epic2d
             t = time%initial
             
             do while (t < time%limit)
-                call write_water_totals(t)
+                ! call write_water_totals(t)
 #ifdef ENABLE_VERBOSE
                 if (verbose) then
                     print "(a15, f0.4)", "time:          ", t

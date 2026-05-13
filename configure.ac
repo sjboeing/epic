@@ -381,8 +381,8 @@ if test "x$ENABLE_DEBUG" = "xyes"; then
     AX_CHECK_COMPILE_FLAG([-fcheck=all], [FCFLAGS="$FCFLAGS -fcheck=all"])
     AX_CHECK_COMPILE_FLAG([-fbounds-check], [FCFLAGS="$FCFLAGS -fbounds-check"])
     AX_CHECK_COMPILE_FLAG([-fbacktrace], [FCFLAGS="$FCFLAGS -fbacktrace"])
-    AX_CHECK_COMPILE_FLAG([-ffpe-trap=denormal,invalid,zero,overflow,underflow],
-                          [FCFLAGS="$FCFLAGS -ffpe-trap=denormal,invalid,zero,overflow,underflow"])
+    AX_CHECK_COMPILE_FLAG([-ffpe-trap=invalid,zero,overflow],
+                          [FCFLAGS="$FCFLAGS -ffpe-trap=invalid,zero,overflow"])
 
     # intel compiler flags
     AX_CHECK_COMPILE_FLAG([-warn all], [FCFLAGS="$FCFLAGS -Wall"])

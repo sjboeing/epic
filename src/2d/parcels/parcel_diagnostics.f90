@@ -130,7 +130,7 @@ module parcel_diagnostics
             !$omp parallel default(shared)
             !$omp do private(n, vel, vol, b, z, eval, lam, B22) &
             !$omp& reduction(+: ke, ape, lsum, l2sum, vsum, v2sum, n_small, rms_zeta) &
-            !$omp& reduction(-: pe)
+            !$omp& reduction(+: pe)
             do n = 1, n_parcels
 
                 vel = velocity(:, n)
@@ -233,9 +233,9 @@ module parcel_diagnostics
             bv = zero
             vv = zero
 
-            !$omp parallel default(shared)
-            !$omp do private(n, bv, vv) &
-            !$omp& reduction(+: vvsum, bvsum, xbv, zbv, x2bv, z2bv, xzbv, xvv, zvv, x2vv, z2vv, xzvv)
+            ! $omp parallel default(shared)
+            ! $omp do private(n, bv, vv) &
+            ! $omp& reduction(+: vvsum, bvsum, xbv, zbv, x2bv, z2bv, xzbv, xvv, zvv, x2vv, z2vv, xzvv)
             do n = 1, n_parcels
                 ! we only use the upper half in horizontal direction
                 if (parcels%position(1, n) >= 0) then

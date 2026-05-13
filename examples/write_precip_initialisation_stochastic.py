@@ -23,16 +23,25 @@ def equivalent_number_concentration(D, qr, rho_water, rho_air):
     mass_per_drop = (np.pi / 6.0) * rho_water * D**3
     return rho_air * qr / mass_per_drop
 
-r_plume = 800.0
-centre = [0.0, 3000.0]
+r_plume = 500.0
+centre = [6395, 3000]
 dx_parcel = 10.0 # Distance between parcels
 
-n_steps = int(np.floor(r_plume / dx_parcel))
+# shape factor for spheroids; >1 is prolate, <1 is oblate
+shape_factor = 1
+
+# spheroid axes: make `a` the x-radius and `b` the z-radius.
+# For shape_factor > 1 we elongate in x (prolate), < 1 elongates in z.
+a = r_plume / shape_factor
+b = r_plume * shape_factor
+
+# Ensure the grid of parcel shifts covers the full ellipse (use max radius)
+n_steps = int(np.ceil(max(a, b) / dx_parcel))
 parcel_shifts = np.arange(-n_steps, n_steps + 1) * dx_parcel
 n_shifts=len(parcel_shifts)
 
-qr_parcels=0.002
-Nr_parcels=10000
+qr_parcels=0.001
+Nr_parcels=60000
 mu=2.5
 rho_water = 1000.0
 rho_air = 1.2256 
@@ -48,7 +57,7 @@ for ii in range(n_shifts):
     parcel_shift_x=parcel_shifts[ii]
     for jj in range(n_shifts):
         parcel_shift_z=parcel_shifts[jj]
-        if(parcel_shift_x*parcel_shift_x+parcel_shift_z*parcel_shift_z<r_plume*r_plume):
+        if ((parcel_shift_x / a) ** 2 + (parcel_shift_z / b) ** 2) < 1.0:
              for mm in range(multiplicity):
                  x_array[0,i_parcel] = centre[0] + parcel_shift_x
                  z_array[0,i_parcel] = centre[1] + parcel_shift_z
@@ -97,4 +106,25 @@ ds = xr.Dataset(
 print(sum(Nr_array[0,:]))
 
 # Save with unlimited time dimension
-ds.to_netcdf("rain_initiation_stochastic_dataset.nc", unlimited_dims=["time"])
+ds.to_netcdf("1g60000_stochastic_rain_input.nc", unlimited_dims=["time"])
+
+# Quick x-z scatter (small, optional):
+try:
+    import matplotlib.pyplot as plt
+
+    x_vals = x_array[0, :].ravel()
+    z_vals = z_array[0, :].ravel()
+
+    plt.figure(figsize=(6, 6))
+    plt.scatter(x_vals, z_vals, s=6, alpha=0.8)
+    plt.gca().set_aspect("equal", adjustable="box")
+    plt.xlabel("x position (m)")
+    plt.ylabel("z position (m)")
+    plt.title("Parcel positions (x vs z)")
+    plt.tight_layout()
+    plt.savefig("xz_scatter.png", dpi=150)
+    plt.close()
+    print("Saved xz_scatter.png")
+except Exception as _err:
+    # plotting is optional; continue if matplotlib isn't available
+    pass
