@@ -91,6 +91,18 @@ module options
 
     type(microphysics_info_type) :: microphysics
 
+    ! damping model
+    type damping_info_type
+        double precision :: vorticity_prefactor     = 1.0d0  ! constant in damping implementation for vorticity
+        double precision :: scalars_prefactor       = 1.0d0  ! constant in damping implementation for scalars
+        logical          :: l_vorticity = .false. ! use damping on vorticity
+        logical          :: l_surface_vorticity = .false. ! use damping on surface vorticity only
+        logical          :: l_scalars   = .false. ! use damping on scalars
+        logical          :: l_surface_scalars = .false. ! use damping on surface scalars only
+    end type damping_info_type
+
+    type(damping_info_type) :: damping
+    
     contains
         ! parse configuration file
         ! (see https://cyber.dabamos.de/programming/modernfortran/namelists.html [8 March 2021])
@@ -100,7 +112,7 @@ module options
             logical :: exists = .false.
 
             ! namelist definitions
-            namelist /EPIC/ field_file, field_tol, output, parcel, time, microphysics
+            namelist /EPIC/ field_file, field_tol, output, parcel, time, microphysics, damping
 
             ! check whether file exists
             inquire(file=filename, exist=exists)
@@ -178,6 +190,13 @@ module options
             call write_netcdf_attribute(ncid, "microphysics_homogeneous", microphysics%l_homogeneous)
             call write_netcdf_attribute(ncid, "microphysics_size_factor", microphysics%microphysics_size_factor)
             call write_netcdf_attribute(ncid, "microphysics_prec_file", microphysics%prec_file)
+
+            call write_netcdf_attribute(ncid, "damping_l_vorticity", damping%l_vorticity)
+            call write_netcdf_attribute(ncid, "damping_l_scalars", damping%l_scalars)
+            call write_netcdf_attribute(ncid, "damping_l_surface_vorticity", damping%l_surface_vorticity)
+            call write_netcdf_attribute(ncid, "damping_l_surface_scalars", damping%l_surface_scalars)
+            call write_netcdf_attribute(ncid, "damping_vorticity_prefactor", damping%vorticity_prefactor)
+            call write_netcdf_attribute(ncid, "damping_scalars_prefactor", damping%scalars_prefactor)
 
         end subroutine write_netcdf_options
 

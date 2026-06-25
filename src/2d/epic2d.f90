@@ -18,6 +18,7 @@ program epic2d
     use parcel_netcdf, only : parcel_io_timer
     use prec_parcel_netcdf, only : prec_parcel_io_timer
     use parcel_diagnostics_netcdf, only : parcel_stats_io_timer
+    use parcel_damping, only : damping_timer
     use fields
     use field_netcdf, only : field_io_timer
     use field_diagnostics, only : field_stats_timer
@@ -82,6 +83,7 @@ program epic2d
 #ifndef NDEBUG
             call register_timer('symmetric vol2grid', sym_vol2grid_timer)
 #endif
+            call register_timer('damping', damping_timer)
 
             call start_timer(epic_timer)
 

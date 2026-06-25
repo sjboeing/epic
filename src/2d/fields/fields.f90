@@ -38,7 +38,8 @@ module fields
 #ifndef NDEBUG
         sym_volg,  &   ! symmetry volume (debug mode only)
 #endif
-        volg           ! volume scalar field
+        volg, &        ! volume scalar field
+        strain_mag 
 
     integer, allocatable, dimension(:, :) :: &
         prec_nparg,  &   ! number of precipitation parcels
@@ -64,6 +65,7 @@ module fields
             allocate(vortg(-1:nz+1, -1:nx))
             allocate(vtend(-1:nz+1, -1:nx))
             allocate(tbuoyg(-1:nz+1, -1:nx))
+            allocate(strain_mag(-1:nz+1, -1:nx))
 
             ! For now, only use a select type here
             if(parcels%is_idealised) then

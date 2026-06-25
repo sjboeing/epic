@@ -8,6 +8,7 @@ module ls_rk4
     use precipitation_parcels, only : prec_parcels, n_prec_parcels
     use parcel_types, only : idealised_parcel_type, realistic_parcel_type
     use parcel_bc
+    use parcel_damping, only : parcel_damp
     use rk4_utils, only: get_B, get_time_step
     use utils, only : write_step
     use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add,sum_field
@@ -139,6 +140,8 @@ module ls_rk4
             call start_timer(rk4_timer)
             call apply_parcel_bc(parcels%position, parcels%B)
             call stop_timer(rk4_timer)
+
+            call parcel_damp(dt)
 
             ! we need to subtract 14 calls since we start and stop
             ! the timer multiple times which increments n_calls

@@ -1,6 +1,6 @@
 module rk4_utils
     use parcel_ellipse, only : get_B22
-    use fields, only : velgradg, tbuoyg, vtend
+    use fields, only : velgradg, tbuoyg, vtend, strain_mag
     use constants, only : zero, one, two, f12
     use parameters, only : nx, nz, dxi
 #ifdef ENABLE_VERBOSE
@@ -85,4 +85,25 @@ module rk4_utils
             endif
         end function get_time_step
 
+        ! @returns the strain magnitude for use in damping routine
+        subroutine get_strain_magnitude_field
+            double precision             :: strain(4)
+            integer                      :: ix, iz
+
+            do ix = -1, nx
+               do iz = 0, nz
+                  strain(:) = velgradg(iz, ix, :)
+                  strain_mag(iz, ix) = sqrt(two * (strain(1) * strain(1) +&
+                                                             strain(2) * strain(2) +&
+                                                             strain(3) * strain(3) +&
+                                                             strain(4) * strain(4)))
+              enddo
+              ! Reflect beyond boundaries to ensure damping is conservative
+              ! This is because the points below the surface contribute to the level above
+              strain_mag(-1, ix) = strain_mag(1, ix)
+              strain_mag(nz+1, ix) = strain_mag(nz-1, ix)
+          enddo
+
+        end subroutine get_strain_magnitude_field
+        
 end module rk4_utils

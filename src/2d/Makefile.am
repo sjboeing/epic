@@ -35,6 +35,7 @@ epic2d_SOURCES = 				\
 	tri_inversion.f90			\
 	utils/utils.f90				\
 	stepper/rk4_utils.f90			\
+	parcels/parcel_damping.f90		\
 	stepper/ls_rk4.f90			\
 	epic2d.f90
 
