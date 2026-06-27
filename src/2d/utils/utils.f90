@@ -1,5 +1,5 @@
 module utils
-    use constants, only : one
+    use constants, only : zero, one
     use options, only : field_file          &
                       , field_tol           &
                       , output              &
@@ -16,7 +16,10 @@ module utils
                                          write_netcdf_field_stats
     use parcel_diagnostics_netcdf, only : create_netcdf_parcel_stats_file, &
                                           write_netcdf_parcel_stats
+    use prec_parcel_diagnostics_netcdf, only : create_netcdf_prec_parcel_stats_file, &
+                                          write_netcdf_prec_parcel_stats
     use parcel_diagnostics, only : calculate_parcel_diagnostics, calculate_peref
+    use prec_parcel_diagnostics, only : calculate_prec_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
     use parcel_init, only : init_parcels, initiate_parcel_type
     use prec_parcel_init, only : initiate_prec_parcel_type
@@ -29,6 +32,7 @@ module utils
     use netcdf_reader, only : get_file_type, get_num_steps, get_time, get_netcdf_box
     use parameters, only : lower, extent, update_parameters, max_num_parcels
     use physics, only : read_physical_quantities, print_physical_quantities, l_peref
+
 ! #ifndef NDEBUG
 !     use parcel_interpl, only : vol2grid_symmetry_error
 ! #endif
@@ -53,6 +57,12 @@ module utils
 
             if (output%write_parcel_stats) then
                 call create_netcdf_parcel_stats_file(trim(output%basename), &
+                                                     output%overwrite,      &
+                                                     l_restart)
+            endif
+
+            if (output%write_parcel_stats .and. microphysics%l_precipitation) then
+                call create_netcdf_prec_parcel_stats_file(trim(output%basename), &
                                                      output%overwrite,      &
                                                      l_restart)
             endif
@@ -108,33 +118,29 @@ module utils
             else
                 call vorticity_tendency(tbuoyg, vtend)
             endif
-           
+
             !------------------grid2par-------------------
-             !Change 2: move grid2par
-                if(microphysics%l_precipitation) then
+            !Change 2: move grid2par
+            if(microphysics%l_precipitation) then
                 call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
-                
+
                 if(microphysics%l_sedimentation) then
                     prec_parcels%local_num = n_prec_parcels
                     call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
                 endif
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
-                    call prec_parcels%evaporation(microphysics%l_single_droplet_size,microphysics%l_homogeneous)
+                    call prec_parcels%evaporation(zero, microphysics%l_single_droplet_size, microphysics%l_homogeneous)
                      !Change 3: add evap2grid
                     call prec_evap2grid(prec_parcels)
                 endif
             endif
 
             !Change 2: move grid2par
-            select type (parcels)
-            type is (realistic_parcel_type)
-                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%delta_ql)
-            end select
-            !----------------------------------------
-
+            call grid2par
 
             call calculate_parcel_diagnostics(parcels%delta_pos)
+            call calculate_prec_parcel_diagnostics
 
             call calculate_field_diagnostics
 
@@ -183,7 +189,9 @@ module utils
             if (output%write_parcel_stats .and. &
                 (t + epsilon(zero) >= neg * dble(nspw) * output%parcel_stats_freq)) then
                 call write_netcdf_parcel_stats(t)
-
+                if(microphysics%l_precipitation) then
+                    call write_netcdf_prec_parcel_stats(t)
+                endif
                 nspw = nspw + 1
             endif
 

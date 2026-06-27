@@ -1,7 +1,7 @@
  module parcel_types
     use physics, only : glat, lambda_c, q_0, qv_dens_coeff, theta_0, gravity, &
     r_d, c_p, L_v, p_surf, p_ref, pressure_scale_height,diffus,k_a,r_v,visc,sc
-    use constants, only : zero, one, f13, f12, six, fpi, three, fpi6, f14, f32, f52,pi,two
+    use constants, only : zero, one, f13, f12, six, fpi, three, fpi6, f14, f32, f52, pi, twopi
     use timer, only : start_timer, stop_timer
     use parcel_ellipsoid
     use spline_module
@@ -10,6 +10,7 @@
     implicit none
 
     ! For now, put some of the constants for setting up simulations here
+    ! We may want to put these into physics.f90 eventually
     double precision, parameter :: tk0c = 273.15       ! Temperature of freezing in Kelvin
     double precision, parameter :: qsa1 = 3.8          ! Top in equation to calculate qsat
     double precision, parameter :: qsa2 = -17.2693882  ! Constant in qsat equation
@@ -17,11 +18,10 @@
     double precision, parameter :: qsa4 = 6.109        ! Constant in qsat equation
 
     ! Precipitation parameters
-    double precision :: rho_air = 1.2256 ! For first tests, just use a constant density
-    double precision :: rho_ref = 1.2256 ! For first tests, just use a constant density
+    double precision :: rho_ref = 1.2256 ! reference density
     double precision, parameter :: rho_w = 1000.0 ! Density of water
 
-    !Abel and shipway fall speed constants
+    ! Abel and shipway fall speed constants
     double precision, parameter :: a1 = 4854.0
     double precision, parameter :: a2 = -446.0 ! Note a2 is negative
     double precision, parameter :: b1 = 1.0
@@ -30,7 +30,19 @@
     double precision, parameter :: f2 = 4085.35
     double precision, parameter :: mu = 2.5
 
+    ! Small number to prevent division by zero issues
+    double precision, parameter :: eps_rain = 1.0e-20
+
+    ! Constants in the ventilation
+    double precision, parameter :: vent_1 = 0.78
+    double precision, parameter :: vent_2 = 0.31
+
+    double precision :: summed_precipitation = 0.0, summed_deletion = 0.0
+
     integer :: saturation_adjustment_timer
+    integer :: evaporation_timer
+    integer :: sedimentation_timer
+
     logical :: splines_are_initiated = .false.
     type(spline) :: esat_spline, press_spline, exn_spline
 
@@ -91,8 +103,8 @@
         double precision, allocatable, dimension(:) :: delta_qr_substep ! delta_qr/dt
         double precision, allocatable, dimension(:) :: delta_Nr ! delta_Nr/dt
         double precision, allocatable, dimension(:) :: qv ! for evaporation calculations
-        double precision, allocatable, dimension(:) :: theta ! for evaporation calculations 
-        
+        double precision, allocatable, dimension(:) :: theta ! for evaporation calculations
+
         contains
             procedure :: alloc => prec_parcel_alloc
             procedure :: dealloc => prec_parcel_dealloc
@@ -101,6 +113,7 @@
             procedure :: sedimentation
             procedure :: evaporation
             procedure :: goners
+            procedure :: full_evap
 
             ! get_buoyancy added here
     end type
@@ -259,8 +272,8 @@
             allocate(this%delta_nr(num))
             allocate(this%qv(num))
             allocate(this%theta(num))
-            
-            
+
+
 
             call this%register_attribute(this%volume, "volume", "m^3")
             call this%register_attribute(this%qr, "qr", "kg/kg")
@@ -270,8 +283,8 @@
             call this%register_attribute(this%delta_nr, "delta_nr", "/s")
             call this%register_attribute(this%qv, "qv", "kg/kg")
             call this%register_attribute(this%theta, "theta", "K")
-            
-           
+
+
         end subroutine prec_parcel_alloc
 
         !::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -287,8 +300,8 @@
             call try_deallocate(this%delta_nr)
             call try_deallocate(this%qv)
             call try_deallocate(this%theta)
-           
-            
+
+
 
             call this%base_dealloc
 
@@ -310,8 +323,8 @@
             call resize_array(this%delta_nr, new_size, this%local_num)
             call resize_array(this%qv, new_size, this%local_num)
             call resize_array(this%theta, new_size, this%local_num)
-            
-            
+
+
 
             call this%reset_attribute(this%volume, "volume")
             call this%reset_attribute(this%qr, "qr")
@@ -321,8 +334,8 @@
             call this%reset_attribute(this%delta_nr, "delta_nr")
             call this%reset_attribute(this%qv, "qv")
             call this%reset_attribute(this%theta, "theta")
-           
-            
+
+
 
         end subroutine prec_parcel_resize
 
@@ -714,89 +727,186 @@
         class(prec_parcel_type), intent(inout) :: this
         logical, intent(in) :: l_single_droplet_size
         double precision :: D, slope, asr1, asr2, vterm
+        double precision :: press, exn, temp, rho_air
 
         integer :: n
 
+        call start_timer(sedimentation_timer)
+
         if(l_single_droplet_size) then
-            !$omp parallel do default(shared) private(n, D, vterm)
+            !$omp parallel do default(shared) private(n, D, press, exn, temp, rho_air, vterm)
             do n = 1, this%local_num
-                    D = ((rho_air/rho_w)*(six*fpi*this%qr(n)/this%nr(n)))**(f13)
-                    vterm = (a1*(D**(b1))*(exp(-f1*D)))+a2*(D**(b2))* (exp(-f2*D))*(rho_ref/rho_air)**(f12)
-                    vterm = max(0.0, vterm)
-                    this%delta_pos(this%z_dim, n) = this%delta_pos(this%z_dim, n) - vterm
+                if(this%qr(n)<eps_rain) then
+                    cycle
+                endif
+                press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
+                exn = (press/p_ref)**(r_d/c_p)
+                temp = this%theta(n)*exn
+                rho_air = press/(r_d*temp) ! Note this is not the density used for Boussinesq
+                ! This effectively implies D changes as the droplet falls in Boussinesq
+                ! Something to keep in mind, though maybe just an inherent consistency with Boussinesq
+                D = ((rho_air/rho_w)*six*fpi*this%qr(n)/this%nr(n))**f13
+                ! Ensure sqrt(rho_ref/rho_air) applied to both terms in vterm.
+                vterm = (a1*D**b1*exp(-f1*D) + a2*D**b2*exp(-f2*D))*sqrt(rho_ref/rho_air)
+                vterm = max(zero, vterm)
+                this%delta_pos(this%z_dim, n) = this%delta_pos(this%z_dim, n) - vterm
             end do
             !$omp end parallel do
         else
-            !$omp parallel do default(shared) private(n,slope,asr1,asr2, vterm)
+            !$omp parallel do default(shared) private(n, press, exn, temp, rho_air, slope, &
+            !$omp          asr1, asr2, vterm)
             do n = 1, this%local_num
-                
-                
-                slope = (fpi6*(rho_w/rho_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13))
+                if(this%qr(n)<eps_rain) then
+                    cycle
+                endif
+                press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
+                exn = (press/p_ref)**(r_d/c_p)
+                temp = this%theta(n)*exn
+                rho_air = press/(r_d*temp) ! Note this is not the density used for Boussinesq
+                slope = (fpi6*(rho_w/rho_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**f13
                 !These are the mass weighted integrals for abel and shipway terminal velocity
-                asr1 = a1*((rho_ref/rho_air)**(f12))*(slope**(one+mu+three)*(slope+f1)**(-(one+mu+three+b1))) &
+                asr1 = a1*sqrt(rho_ref/rho_air)*(slope**(one+mu+three)*(slope+f1)**(-(one+mu+three+b1))) &
                 *(gamma(one+mu+three+b1)/gamma(one+mu+three))
-                asr2 = a2*((rho_ref/rho_air)**(f12))*(slope**(one+mu+three)*(slope+f2)**(-(one+mu+three+b2))) &
+                asr2 = a2*sqrt(rho_ref/rho_air)*(slope**(one+mu+three)*(slope+f2)**(-(one+mu+three+b2))) &
                 *(gamma(one+mu+three+b2)/gamma(one+mu+three))
-                vterm = max(0.0, asr1 + asr2)
+                vterm = max(zero, asr1 + asr2)
                 this%delta_pos(this%z_dim, n) = this%delta_pos(this%z_dim, n) - vterm
             end do
             !$omp end parallel do
          endif
 
+        call stop_timer(sedimentation_timer)
+
     end subroutine sedimentation
 
-    subroutine evaporation(this,l_single_droplet_size,l_homogeneous)
+    subroutine evaporation(this, dt_eff, l_single_droplet_size, l_homogeneous)
         class(prec_parcel_type), intent(inout) :: this
-        double precision ::  exn, temp, ro_air, slope, vent_r,abliq, ws,press,D,vterm
-        logical, intent(in) :: l_single_droplet_size,l_homogeneous
+        double precision, intent(in) :: dt_eff
+        logical, intent(in) :: l_single_droplet_size, l_homogeneous
+        double precision ::  qsat, exn, temp, rho_air, slope, vent_r,abliq, press, evap_term, D, vterm
         integer :: n
-        
-        !$omp parallel do default(shared) private(n,exn,temp,ro_air,slope,vent_r,abliq,ws,press)
-        do n = 1, this%local_num
-            
-            press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
-            exn = (press/p_ref)**(r_d/c_p)
-            temp = this%theta(n)*exn
-            ro_air = press/(r_d*temp)
-            ws = 3.8/(0.01*press*exp(-17.2693882*(temp-273.15)/(temp-35.86))-6.109)
-            abliq = 1.0/(L_v**2/(r_v*k_a)*ro_air*temp**(-2)+1.0/(diffus*ws))
-            
-            
-            
-            if (l_single_droplet_size .eqv. .true.) then
-                D = ((rho_air/rho_w)*(six*fpi*this%qr(n)/this%nr(n)))**(f13)
-                vterm = (a1*(D**(b1))*(exp(-f1*D)))+a2*(D**(b2))* (exp(-f2*D))*(rho_ref/rho_air)**(f12)
-                vterm = max(0.0, vterm)
-                vent_r = 2*pi*D*(0.78 + 0.31*(sc**(f13))*(((vterm*D*rho_air)/visc)**(f12)))
-                this%delta_qr_substep(n) =  &
-                    -(1.0 - this%qv(n)/ws) * vent_r * abliq * this%nr(n) 
-            else
-               slope = ((pi/6)*(rho_w/ro_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**((f13)) 
-               vent_r = two*pi*(this%nr(n))*ro_air* &
-                    (0.78*((one+mu)/(slope)) &
-                    +  0.31*((a1*ro_air/visc)**(f12))*(sc**(f13))*((rho_ref/ro_air)**(f14))  &
-                    * (gamma((f12*b1 +mu +f52))/gamma((1+mu))) &
-                    *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
-                    *((slope)**(-f12*b1 -f32))) 
-                this%delta_qr_substep(n) = -(1.0-this%qv(n)/ws)*vent_r*abliq
-            end if
-            this%delta_qr(n) = this%delta_qr(n)+this%delta_qr_substep(n)
-            
 
-            if (l_homogeneous .eqv. .true.) then
-                this%delta_nr(n) = 0.0
+        call start_timer(evaporation_timer)
+
+        ! THIS CODE MAY BE A BIT TOO BRANCHY AT THE MOMENT
+        ! ALSO NEEDS CLEANING UP TOO GET RID OF MANUALLY DEFINED CONSTANTS
+        !$omp parallel do default(shared) private(n, press, exn, temp, rho_air, &
+        !$omp          qsat, abliq, D, vterm, slope, vent_r, evap_term)
+        do n = 1, this%local_num
+
+            ! take into account there may be other processes
+            ! eventually also evaporate nr
+
+            if(this%qr(n)>eps_rain) then
+
+               press = p_surf*exp(-this%position(this%z_dim,n)/pressure_scale_height)
+               exn = (press/p_ref)**(r_d/c_p)
+               temp = this%theta(n)*exn
+
+               rho_air = press/(r_d*temp) ! Note this is not the density used for Boussinesq
+               qsat = qsa1/(0.01*press*exp(qsa2*(temp-tk0c)/(temp-qsa3))-qsa4)
+               abliq = one/(L_v*L_v/(r_v*k_a*temp*temp)*rho_air+one/(diffus*qsat))
+
+               if (l_single_droplet_size) then
+                   D = ((rho_air/rho_w)*six*fpi*this%qr(n)/this%nr(n))**f13
+                   ! Ensure sqrt(rho_ref/rho_air) applied to both terms in vterm.
+                   vterm = (a1*D**b1*exp(-f1*D) + a2*D**b2*exp(-f2*D))*sqrt(rho_ref/rho_air)
+                   vterm = max(zero, vterm)
+                   ! Check factor rho_air.
+                   vent_r = twopi*D*rho_air*(vent_1 + vent_2*sqrt(vterm*D*rho_air/visc)*sc**f13)
+                   evap_term =  (one - this%qv(n)/qsat)*vent_r*abliq*this%nr(n)
+               else
+                   slope = ((pi/six)*(rho_w/rho_air)*(this%nr(n)/this%qr(n))*(mu+1)*(mu+2)*(mu+3))**(f13)
+                   ! Only a1 used for simplicity?
+                   vent_r = twopi*rho_air* &
+                        (vent_1*(one+mu)/slope &
+                        +  vent_2*sqrt(a1*rho_air/visc)*(sc**f13)*((rho_ref/rho_air)**f14)  &
+                        * (gamma(f12*b1 +mu +f52)/gamma(one+mu)) &
+                        *((one + (f12*f1)/slope)**(-(f12*b1 + mu + f52))) &
+                        *(slope**(-f12*b1 -f32)))
+                    evap_term = (one-this%qv(n)/qsat)*vent_r*abliq*this%nr(n)
+                endif
             else
-                this%delta_nr(n) = this%delta_qr_substep(n)*(this%nr(n)/this%qr(n))
-            end if
-            
-            
-            
+                evap_term= zero
+            endif
+
+            this%delta_qr(n) = this%delta_qr(n) - evap_term
+
+            ! correct if limiter hit to prevent negative qr
+            if(this%delta_qr(n)*dt_eff <-this%qr(n)) then
+               ! adding this for final write where dt not estabilished
+               ! at least in current code
+               if(dt_eff>zero) then
+                   ! Redefine delta_qr
+                   ! Ensure delta_qr_substep consistent
+                   this%delta_qr_substep(n) = - this%qr(n)/dt_eff - (this%delta_qr(n) + evap_term)
+                   this%delta_qr(n)=-this%qr(n)/dt_eff
+               else
+                   this%delta_qr_substep(n) = -evap_term
+               endif
+            else
+               this%delta_qr_substep(n) = -evap_term
+            endif
+
+            if (l_single_droplet_size .or. l_homogeneous) then
+                 ! Do nothing. written out for convenience. Reminder: make sure to not change any existing tendencies
+                 this%delta_nr(n) = this%delta_nr(n)
+            else
+                if(this%qr(n)>eps_rain) then
+                    this%delta_nr(n) = this%delta_nr(n)+this%delta_qr_substep(n)*(this%nr(n)/this%qr(n))
+                else
+                    this%delta_nr(n) = this%delta_nr(n)
+                end if
+            endif
+
+            ! There is a limiter on Nr in LS_RK4 now
         end do
         !$omp end parallel do
-        
+
+        call stop_timer(evaporation_timer)
+
     end subroutine evaporation
 
-    subroutine goners(this)
+    subroutine goners(this, step, n_steps, cas, cbs, dt)
+        class(prec_parcel_type), intent(inout) :: this
+        integer, intent(in) :: step
+        integer, intent(in) :: n_steps
+        double precision, intent(in) :: cas(n_steps)
+        double precision, intent(in) :: cbs(n_steps)
+        double precision, intent(in) :: dt
+        integer, allocatable :: pid(:)  ! Declare pid as an allocatable array
+        integer :: n_del
+        integer :: n
+        integer :: this_step
+
+        n_del = 0
+        allocate(pid(0:this%local_num))  ! Allocate pid with the size of local_num
+        pid=0
+
+        ! Replace this by a reduction loop first
+        do n = 1, this%local_num
+            if (this%position(this%z_dim, n) <= 0) then
+                ! complete the time step for this parcel with no further tendencies assumed
+                if(step<n_steps) then
+                   do this_step=step, n_steps-1
+                     this%delta_qr(n)=cas(this_step)*this%delta_qr(n)
+                     this%qr(n)=this%qr(n)+cbs(this_step+1)*dt*this%delta_qr(n)
+                   end do
+                endif
+                summed_precipitation=summed_precipitation+this%volume(n)*this%qr(n)
+                n_del = n_del + 1
+                pid(n_del) = n
+           endif
+        end do
+
+        if (n_del > 0) then
+            call this%delete(pid=pid(0:n_del), n_del=n_del)
+        end if
+        deallocate(pid)  ! Deallocate pid to free memory
+
+    end subroutine goners
+
+    subroutine full_evap(this)
         class(prec_parcel_type), intent(inout) :: this
         integer, allocatable :: pid(:)  ! Declare pid as an allocatable array
         integer :: n_del
@@ -808,14 +918,10 @@
 
         ! Replace this by a reduction loop first
         do n = 1, this%local_num
-            if (this%position(this%z_dim, n) <= 0) then
+            if (this%qr(n) < eps_rain) then
+                summed_deletion=summed_deletion+this%volume(n)*this%qr(n)
                 n_del = n_del + 1
                 pid(n_del) = n
-                cycle
-            else if (this%qr(n) <= 0) then
-                n_del = n_del + 1
-                pid(n_del) = n
-                cycle
             end if
         end do
 
@@ -824,6 +930,7 @@
         end if
 
         deallocate(pid)  ! Deallocate pid to free memory
-    end subroutine goners
+    end subroutine full_evap
+
 
 end module

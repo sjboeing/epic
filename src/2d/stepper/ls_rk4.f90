@@ -13,9 +13,10 @@ module ls_rk4
     use utils, only : write_step
     use parcel_interpl, only : par2grid_idealised, par2grid_realistic, grid2par, grid2par_add,sum_field
     use prec_parcel_interpl, only : prec_par2grid, prec_grid2par, prec_grid2par_add, prec_evap2grid
-    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag,qvg,qrg,qlg,volg
+    use fields, only : velgradg, velog, vortg, vtend, tbuoyg, prec_tbuoyg, thetag, qvg, qrg, qlg, volg
     use tri_inversion, only : vor2vel, vorticity_tendency
     use parcel_diagnostics, only : calculate_parcel_diagnostics
+    use prec_parcel_diagnostics, only : calculate_prec_parcel_diagnostics
     use field_diagnostics, only : calculate_field_diagnostics
     use parameters, only : nx, nz
     use options, only : microphysics
@@ -52,7 +53,7 @@ module ls_rk4
             double precision, intent(inout) :: t
             double precision                :: dt
             integer                         :: n
-            !-----------par2grid------------------
+
             select type (parcels)
             type is (idealised_parcel_type)
                 call par2grid_idealised(parcels)
@@ -63,15 +64,6 @@ module ls_rk4
             if(microphysics%l_precipitation) then
                 call prec_par2grid(prec_parcels)
             end if
-        
-            ! if(microphysics%l_precipitation) then
-            !     print *, "(qvg+qlg+qrg)*volg=", sum_field((qvg+qlg+qrg)*volg)
-            !     print *, "(qvg+qlg+qrg)=", sum_field((qvg+qlg+qrg))
-            !     print *, "qrg*volg=", sum_field(qrg*volg)
-            !     print *, "qrg=", sum_field(qrg)
-            ! endif
-            ! print *, "(qvg+qlg)*volg=", sum_field((qvg+qlg)*volg)
-            ! print *, "(qvg+qlg)=", sum_field((qvg+qlg))
 
             ! need to be called in order to set initial time step;
             ! this is also needed for the first ls-rk4 substep
@@ -86,42 +78,44 @@ module ls_rk4
             ! update the time step
             dt = get_time_step(t)
             !------------------grid2par-------------------
-             !Change 2: move grid2par
-                if(microphysics%l_precipitation) then
+            !Change 2: move grid2par
+            if(microphysics%l_precipitation) then
                 call prec_grid2par(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
-                
+
                 if(microphysics%l_sedimentation) then
                     prec_parcels%local_num = n_prec_parcels
                     call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
                 endif
+
                 if (microphysics%l_evaporation) then
                     prec_parcels%local_num = n_prec_parcels
                     prec_parcels%delta_qr = zero
-                    call prec_parcels%evaporation(microphysics%l_single_droplet_size,microphysics%l_homogeneous)
+                    call prec_parcels%evaporation(cbs(1)*dt, microphysics%l_single_droplet_size, microphysics%l_homogeneous)
                      !Change 3: add evap2grid
                     call prec_evap2grid(prec_parcels)
                 endif
             endif
 
             !Change 2: move grid2par
-            select type (parcels)
-            type is (realistic_parcel_type)
-                call grid2par(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%delta_ql)
-            end select
+            call grid2par
             !----------------------------------------
 
 
             !Change 1: Move diagnostics
             call calculate_parcel_diagnostics(parcels%delta_pos)
 
+            if(microphysics%l_precipitation) then
+                call calculate_prec_parcel_diagnostics
+            endif
+
             call calculate_field_diagnostics
-            
+
             call write_step(t)
 
-    
+
             do n = 1, 4
                 call ls_rk4_substep(dt, n)
-                
+
 !---------------par2grid------------------
                 select type (parcels)
                 type is (idealised_parcel_type)
@@ -129,10 +123,11 @@ module ls_rk4
                 type is (realistic_parcel_type)
                     call par2grid_realistic(parcels)
                 end select
-               
+
                 if(microphysics%l_precipitation) then
-                    call prec_par2grid(prec_parcels)  
+                    call prec_par2grid(prec_parcels)
                 end if
+
 !----------------------------------------
             enddo
             call ls_rk4_substep(dt, 5)
@@ -146,7 +141,7 @@ module ls_rk4
             ! we need to subtract 14 calls since we start and stop
             ! the timer multiple times which increments n_calls
             timings(rk4_timer)%n_calls =  timings(rk4_timer)%n_calls - 14
-    
+
             t = t + dt
         end subroutine ls_rk4_step
 
@@ -159,10 +154,10 @@ module ls_rk4
             integer,          intent(in) :: step
             double precision             :: ca, cb
             integer                      :: n
-            
+
             ca = cas(step)
             cb = cbs(step)
-            
+
             if (step == 1) then
                 call start_timer(rk4_timer)
 
@@ -181,32 +176,28 @@ module ls_rk4
                 else
                     call vorticity_tendency(tbuoyg, vtend)
                 endif
-                
-                !Change 2: move grid2par
+
+
+              !Change 2: move grid2par
                !------------------grid2par-------------------
-             !Change 2: move grid2par
                 if(microphysics%l_precipitation) then
                     call prec_grid2par_add(prec_parcels%delta_pos,prec_parcels%theta,prec_parcels%qv)
-                    
+
                     if(microphysics%l_sedimentation) then
                         prec_parcels%local_num = n_prec_parcels
                         call prec_parcels%sedimentation(microphysics%l_single_droplet_size)
                     endif
                     if (microphysics%l_evaporation) then
                         prec_parcels%local_num = n_prec_parcels
-                        call prec_parcels%evaporation(microphysics%l_single_droplet_size,microphysics%l_homogeneous)
+                        call prec_parcels%evaporation(cbs(step)*dt, microphysics%l_single_droplet_size, microphysics%l_homogeneous)
                         !Change 3: add evap2grid
                         call prec_evap2grid(prec_parcels)
                     endif
                 endif
 
-                !Change 2: move grid2par
-                select type (parcels)
-                type is (realistic_parcel_type)
-                    call grid2par_add(parcels%delta_pos, parcels%delta_vor, parcels%strain, parcels%delta_ql)
-                end select
-                !----------------------------------------
-               
+
+                call grid2par_add
+
                 call start_timer(rk4_timer)
 
                 !$omp parallel do default(shared) private(n)
@@ -220,7 +211,7 @@ module ls_rk4
             endif
 
             call start_timer(rk4_timer)
-           
+
             !$omp parallel do default(shared) private(n)
             do n = 1, n_parcels
                 parcels%position(:, n) = parcels%position(:, n) &
@@ -234,7 +225,7 @@ module ls_rk4
                 end select
             enddo
             !$omp end parallel do
-            
+
             if(microphysics%l_precipitation) then
                 !$omp parallel do default(shared) private(n)
                 do n = 1, n_prec_parcels
@@ -244,20 +235,31 @@ module ls_rk4
                                     + cb * dt * prec_parcels%delta_qr(n)
                     prec_parcels%nr(n) = prec_parcels%nr(n) &
                                     + cb * dt * prec_parcels%delta_Nr(n)
-                    
                 enddo
                 !$omp end parallel do
-    
+
                 prec_parcels%local_num = n_prec_parcels
-                call prec_parcels%goners
+                call prec_parcels%goners(step, 5, cas, cbs, dt)
                 n_prec_parcels = prec_parcels%local_num
+
+                ! Raindrop size limiter and negative Nr correction currently set to 1 gram per droplet
+                !$omp parallel do default(shared) private(n)
+                do n = 1, n_prec_parcels
+                    if(prec_parcels%nr(n)<prec_parcels%qr(n)/microphysics%Nr_limiter) then
+                       prec_parcels%nr(n)=prec_parcels%qr(n)/microphysics%Nr_limiter
+                    endif
+                enddo
+                !$omp end parallel do
             endif
-            
+
             call stop_timer(rk4_timer)
-            
-           
-            if (step == 5) then
-               return
+
+
+            if (step == 5 .and. microphysics%l_precipitation) then
+                prec_parcels%local_num = n_prec_parcels
+                call prec_parcels%full_evap
+                n_prec_parcels = prec_parcels%local_num
+                return
             endif
 
             call start_timer(rk4_timer)
@@ -269,24 +271,21 @@ module ls_rk4
                 parcels%delta_b(:, n) = ca * parcels%delta_b(:, n)
                 select type (parcels)
                 type is (realistic_parcel_type)
-                parcels%delta_ql(n) = ca * parcels%delta_ql(n)
-
+                   parcels%delta_ql(n) = ca * parcels%delta_ql(n)
                 end select
             enddo
             !$omp end parallel do
             if(microphysics%l_precipitation) then
                 !$omp parallel do default(shared) private(n)
                 do n = 1, n_prec_parcels
-                    
                     prec_parcels%delta_pos(:, n) = ca * prec_parcels%delta_pos(:, n)
                     prec_parcels%delta_qr(n) = ca * prec_parcels%delta_qr(n)
                     prec_parcels%delta_Nr(n) = ca * prec_parcels%delta_Nr(n)
-                    
                 enddo
                 !$omp end parallel do
             end if
             call stop_timer(rk4_timer)
-            
+
         end subroutine ls_rk4_substep
 
 end module ls_rk4

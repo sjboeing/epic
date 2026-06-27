@@ -15,16 +15,18 @@ program epic2d
                                   lapl_corr_timer,        &
                                   grad_corr_timer
     use parcel_diagnostics, only : parcel_stats_timer
+    use prec_parcel_diagnostics, only : prec_parcel_stats_timer
     use parcel_netcdf, only : parcel_io_timer
     use prec_parcel_netcdf, only : prec_parcel_io_timer
     use parcel_diagnostics_netcdf, only : parcel_stats_io_timer
     use parcel_damping, only : damping_timer
+    use prec_parcel_diagnostics_netcdf, only : prec_parcel_stats_io_timer
     use fields
     use field_netcdf, only : field_io_timer
     use field_diagnostics, only : field_stats_timer
     use field_diagnostics_netcdf, only : field_stats_io_timer
     use tri_inversion, only : init_inversion, vor2vel_timer, vtend_timer
-    use parcel_interpl, only : grid2par_timer, par2grid_timer,sum_field
+    use parcel_interpl, only : grid2par_timer, par2grid_timer
     use prec_parcel_interpl, only : prec_grid2par_timer, prec_par2grid_timer
 #ifndef NDEBUG
     use parcel_interpl, only : sym_vol2grid_timer
@@ -34,7 +36,7 @@ program epic2d
     use utils, only : write_last_step, setup_output_files        &
                     , setup_restart, setup_domain_and_parameters &
                     , setup_parcels, setup_prec_parcels
-    use parcel_types, only : saturation_adjustment_timer
+    use parcel_types, only : saturation_adjustment_timer, evaporation_timer, sedimentation_timer
 
     implicit none
 
@@ -68,9 +70,11 @@ program epic2d
             call register_timer('gradient correction', grad_corr_timer)
             call register_timer('parcel initialisation', init_timer)
             call register_timer('parcel diagnostics', parcel_stats_timer)
+            call register_timer('prec parcel diagnostics', prec_parcel_stats_timer)
             call register_timer('parcel I/O', parcel_io_timer)
             call register_timer('prec parcel I/O', prec_parcel_io_timer)
             call register_timer('parcel diagnostics I/O', parcel_stats_io_timer)
+            call register_timer('prec_parcel diagnostics I/O', prec_parcel_stats_io_timer)
             call register_timer('field I/O', field_io_timer)
             call register_timer('field diagnostics', field_stats_timer)
             call register_timer('field diagnostics I/O', field_stats_io_timer)
@@ -84,6 +88,8 @@ program epic2d
             call register_timer('symmetric vol2grid', sym_vol2grid_timer)
 #endif
             call register_timer('damping', damping_timer)
+            call register_timer('evaporation', evaporation_timer)
+            call register_timer('sedimentation', sedimentation_timer)
 
             call start_timer(epic_timer)
 
@@ -104,7 +110,7 @@ program epic2d
             call init_parcel_correction
 
             call field_default
-            
+
             call setup_output_files
 
         end subroutine
@@ -117,21 +123,18 @@ program epic2d
 #endif
             double precision :: t = zero ! current time
             integer          :: cor_iter    ! iterator for parcel correction
-            
+
             t = time%initial
-            
+
             do while (t < time%limit)
-                ! call write_water_totals(t)
 #ifdef ENABLE_VERBOSE
                 if (verbose) then
                     print "(a15, f0.4)", "time:          ", t
                 endif
 #endif
-                
-
 
                 call ls_rk4_step(t)
-                
+
                 call merge_ellipses(parcels)
 
                 call split_ellipses(parcel%lambda_max)
@@ -142,9 +145,9 @@ program epic2d
                 enddo
 
                 call parcels%saturation_adjustment
-                
+
             enddo
-            
+
             ! write final step (we only write if we really advanced in time)
             if (t > time%initial) then
                 call write_last_step(t)
