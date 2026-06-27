@@ -90,7 +90,7 @@ module rk4_utils
             double precision             :: strain(4)
             integer                      :: ix, iz
 
-            do ix = -1, nx
+            do ix = 0, nx-1
                do iz = 0, nz
                   strain(:) = velgradg(iz, ix, :)
                   strain_mag(iz, ix) = sqrt(two * (strain(1) * strain(1) +&
@@ -98,11 +98,15 @@ module rk4_utils
                                                              strain(3) * strain(3) +&
                                                              strain(4) * strain(4)))
               enddo
-              ! Reflect beyond boundaries to ensure damping is conservative
-              ! This is because the points below the surface contribute to the level above
-              strain_mag(-1, ix) = strain_mag(1, ix)
-              strain_mag(nz+1, ix) = strain_mag(nz-1, ix)
           enddo
+
+          ! ensure periodic BCs
+          strain_mag(:, -1) = strain_mag(:, nx-1)
+          strain_mag(:, nx) = strain_mag(:, 0)
+          ! Reflect beyond boundaries to ensure damping is conservative
+          ! This is because the points below the surface contribute to the level above
+          strain_mag(-1, :) = strain_mag(1, :)
+          strain_mag(nz+1, :) = strain_mag(nz-1, :)
 
         end subroutine get_strain_magnitude_field
         

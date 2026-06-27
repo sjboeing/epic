@@ -60,7 +60,6 @@ module parcel_damping
                     call reflect_realistic(parcels)
                 end select
 
-
                 call get_strain_magnitude_field
                 
                 select type (parcels)
@@ -210,9 +209,9 @@ module parcel_damping
                         ! Index to keep track of grid cells right above/below boundary
                         ! This is because the damping only happens at the boundary level
                         ! Consistent with reflection used in parcel_damp
-                        if ((js == nz-1) .or. (js == nz-1)) then
+                        if ((js == -1) .or. (js == nz-1)) then
                             surface_index = 1 ! below lower or below upper boundary
-                        elseif ((js == nz) .or. (js == nz)) then
+                        elseif ((js == 0) .or. (js == nz)) then
                             surface_index = 0 ! above lower or above upper boundary
                         else
                             cycle ! continue loop if not near a surface
@@ -349,9 +348,9 @@ module parcel_damping
                         ! Index to keep track of grid cells right above/below boundary
                         ! This is because the damping only happens at the boundary level
                         ! Consistent with reflection used in parcel_damp
-                        if ((js == nz-1) .or. (js == nz-1)) then
+                        if ((js == -1) .or. (js == nz-1)) then
                             surface_index = 1 ! below lower or below upper boundary
-                        elseif ((js == nz) .or. (js == nz)) then
+                        elseif ((js == 0) .or. (js == nz)) then
                             surface_index = 0 ! above lower or above upper boundary
                         else
                             cycle ! continue loop if not near a surface
