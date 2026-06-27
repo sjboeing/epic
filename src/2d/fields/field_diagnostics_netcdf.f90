@@ -20,7 +20,8 @@ module field_diagnostics_netcdf
     integer             :: ncid
     integer             :: t_axis_id, t_dim_id, n_writes,                   &
                            rms_v_id, abserr_v_id, max_npar_id, min_npar_id, &
-                           avg_npar_id, avg_nspar_id, keg_id, apeg_id
+                           avg_npar_id, avg_nspar_id, keg_id, apeg_id, &
+                           int_qv_id, int_ql_id, int_qr_id, int_qall_id
     double precision    :: restart_time
 #ifndef NDEBUG
     integer             :: max_sym_vol_err_id
@@ -171,6 +172,47 @@ module field_diagnostics_netcdf
                 varid=max_sym_vol_err_id)
 #endif
 
+#ifndef ENABLE_DRY_MODE
+            call define_netcdf_dataset(                                     &
+                ncid=ncid,                                                  &
+                name='int_qv',                                              &
+                long_name='qvg*volg sum',                                   &
+                std_name='',                                                &
+                unit='m^3',                                                 &
+                dtype=NF90_DOUBLE,                                          &
+                dimids=(/t_dim_id/),                                        &
+                varid=int_qv_id)
+
+            call define_netcdf_dataset(                                     &
+                ncid=ncid,                                                  &
+                name='int_ql',                                              &
+                long_name='qlg*volg sum',                                   &
+                std_name='',                                                &
+                unit='m^3',                                                 &
+                dtype=NF90_DOUBLE,                                          &
+                dimids=(/t_dim_id/),                                        &
+                varid=int_ql_id)
+
+            call define_netcdf_dataset(                                     &
+                ncid=ncid,                                                  &
+                name='int_qr',                                              &
+                long_name='qrg*volg sum',                                   &
+                std_name='',                                                &
+                unit='m^3',                                                 &
+                dtype=NF90_DOUBLE,                                          &
+                dimids=(/t_dim_id/),                                        &
+                varid=int_qr_id)
+
+            call define_netcdf_dataset(                                     &
+                ncid=ncid,                                                  &
+                name='int_qall',                                            &
+                long_name='qall*volg sum',                                  &
+                std_name='',                                                &
+                unit='m^3',                                                 &
+                dtype=NF90_DOUBLE,                                          &
+                dimids=(/t_dim_id/),                                        &
+                varid=int_qall_id)
+#endif
             call close_definition(ncid)
 
         end subroutine create_netcdf_field_stats_file
@@ -203,6 +245,14 @@ module field_diagnostics_netcdf
 #ifndef NDEBUG
             call get_var_id(ncid, 'max_sym_vol_err', max_sym_vol_err_id)
 #endif
+
+#ifndef ENABLE_DRY_MODE
+            call get_var_id(ncid, 'int_qv', int_qv_id)
+            call get_var_id(ncid, 'int_ql', int_ql_id)
+            call get_var_id(ncid, 'int_qr', int_qr_id)
+            call get_var_id(ncid, 'int_qall', int_qall_id)
+#endif
+
 
         end subroutine read_netcdf_field_stats_content
 
@@ -239,6 +289,13 @@ module field_diagnostics_netcdf
             endif
 #ifndef NDEBUG
             call write_netcdf_scalar(ncid, max_sym_vol_err_id, max_vol_sym_err, n_writes)
+#endif
+
+#ifndef ENABLE_DRY_MODE
+            call write_netcdf_scalar(ncid, int_qv_id, int_qv, n_writes)
+            call write_netcdf_scalar(ncid, int_ql_id, int_ql, n_writes)
+            call write_netcdf_scalar(ncid, int_qr_id, int_qr, n_writes)
+            call write_netcdf_scalar(ncid, int_qall_id, int_qall, n_writes)
 #endif
             ! increment counter
             n_writes = n_writes + 1

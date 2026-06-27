@@ -86,6 +86,7 @@ module options
         logical          :: l_loading = .true.
         logical          :: l_homogeneous = .false.
         double precision :: microphysics_size_factor = 10.0d0    ! Average number of prec_parcels per grid box allowed.
+        double precision :: Nr_limiter = 0.001    ! Scaling factor for Nr-qr limiter (effectively maximum q_r at Nr is 1)
         character(len=512) :: prec_file = ''
     end type microphysics_info_type
 
@@ -186,9 +187,11 @@ module options
             call write_netcdf_attribute(ncid, "microphysics_l_sedimentation", microphysics%l_sedimentation)
             call write_netcdf_attribute(ncid, "microphysics_l_single_droplet_size", microphysics%l_single_droplet_size)
             call write_netcdf_attribute(ncid, "microphysics_l_evaporation", microphysics%l_evaporation)
+            call write_netcdf_attribute(ncid, "microphysics_l_homogeneous", microphysics%l_homogeneous)
             call write_netcdf_attribute(ncid, "microphysics_l_loading", microphysics%l_loading)
             call write_netcdf_attribute(ncid, "microphysics_homogeneous", microphysics%l_homogeneous)
             call write_netcdf_attribute(ncid, "microphysics_size_factor", microphysics%microphysics_size_factor)
+            call write_netcdf_attribute(ncid, "microphysics_Nr_limiter", microphysics%Nr_limiter)
             call write_netcdf_attribute(ncid, "microphysics_prec_file", microphysics%prec_file)
 
             call write_netcdf_attribute(ncid, "damping_l_vorticity", damping%l_vorticity)

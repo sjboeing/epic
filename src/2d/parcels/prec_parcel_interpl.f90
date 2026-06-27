@@ -50,21 +50,18 @@ module prec_parcel_interpl
             prec_tbuoyg = zero
             qrg = zero
             Nrg = zero
-            
-            
 
-            
             !$omp parallel default(shared)
             !$omp do private(n, i, j, points, pvol, btot, is, js, weights) &
             !$omp& reduction(+:prec_nparg, qrg, Nrg,prec_tbuoyg, prec_volg)
             do n = 1, n_prec_parcels
-                
+
                 pvol = prec_parcels%volume(n)
 
                 call prec_parcels%get_buoyancy(n, btot)
-                
+
                 points = prec_parcels%position(:, n)
-                
+
                 call get_index(prec_parcels%position(:, n), i, j)
                 i = mod(i + nx, nx)
                 prec_nparg(j, i) = prec_nparg(j, i) + 1
@@ -76,27 +73,24 @@ module prec_parcel_interpl
                 call bilinear(points(:), is, js, weights)
 
                 weights = weights*pvol
-                
+
                 if(microphysics%l_loading) then
                     prec_tbuoyg(js:js+1, is:is+1) = prec_tbuoyg(js:js+1, is:is+1) &
                                          + weights * btot
                 endif
 
-                
+
                 prec_volg(js:js+1, is:is+1) = prec_volg(js:js+1, is:is+1) &
                                    + weights
                 qrg(js:js+1, is:is+1) = qrg(js:js+1, is:is+1) &
                                    + weights * prec_parcels%qr(n)
                 Nrg(js:js+1, is:is+1) = Nrg(js:js+1, is:is+1) &
                                    + weights * prec_parcels%Nr(n)
-                
-                
-                
-               
+
             enddo
             !$omp end do
             !$omp end parallel
-            
+
             ! apply periodicity
             prec_volg(:, 0)    = prec_volg(:, 0) + prec_volg(:, nx)
             prec_volg(:, nx-1) = prec_volg(:, nx-1) + prec_volg(:, -1)
@@ -159,7 +153,7 @@ module prec_parcel_interpl
             ! z derivative used for the time step)
             Nrg(-1,   :) = two * Nrg(0,  :) - Nrg(1, :)
             Nrg(nz+1, :) = two * Nrg(nz, :) - Nrg(nz-1, :)
-           
+
             ! sum halo contribution into internal cells
             ! (be aware that halo cell contribution at upper boundary
             ! are added to cell nz)
@@ -200,7 +194,6 @@ module prec_parcel_interpl
                     !$omp do private(n)
                     do n = 1, n_prec_parcels
                         vel(:, n) = zero
-                        
                     enddo
                     !$omp end do
                     !$omp end parallel
@@ -210,7 +203,6 @@ module prec_parcel_interpl
                 !$omp do private(n)
                 do n = 1, n_prec_parcels
                     vel(:, n) = zero
-                   
                 enddo
                 !$omp end do
                 !$omp end parallel
@@ -225,14 +217,14 @@ module prec_parcel_interpl
 
                 ! get interpolation weights and mesh indices
                 call bilinear(points(:), is, js, weights)
-                
+
                 do l = 1,2
                     vel(l, n) = vel(l, n) &
                               + sum(weights * velog(js:js+1, is:is+1, l))
                 end do
-                
+
                 theta(n) = sum(weights * thetag(js:js+1, is:is+1))
-                 
+
                 qv(n)   = sum(weights * qvg(js:js+1, is:is+1))
             enddo
             !$omp end do
@@ -261,20 +253,20 @@ module prec_parcel_interpl
             integer          :: n, i, j
             double precision :: pvol
             ! call start_timer(prec_evap2grid_timer)
-            
             delta_qrg_substep = zero
             !$omp parallel default(shared)
             !$omp do private(n, i, j, points, pvol, is, js, weights) &
             !$omp& reduction(+:delta_qrg_substep)
             do n = 1, n_prec_parcels
-                
+
                 pvol = prec_parcels%volume(n)
-                
+
                 points = prec_parcels%position(:, n)
-                
+
+
                 call get_index(prec_parcels%position(:, n), i, j)
                 i = mod(i + nx, nx)
-               
+
 
                 ! ensure point is within the domain
                 call apply_periodic_bc(points(:))
@@ -283,16 +275,14 @@ module prec_parcel_interpl
                 call bilinear(points(:), is, js, weights)
 
                 weights = weights*pvol
-                
     
                 delta_qrg_substep(js:js+1, is:is+1) = delta_qrg_substep(js:js+1, is:is+1) &
                                    + weights * prec_parcels%delta_qr_substep(n)
                 
-                
-            enddo
+             enddo
             !$omp end do
             !$omp end parallel
-            
+
             ! apply periodicity
 
             delta_qrg_substep(:, 0)    = delta_qrg_substep(:, 0) + delta_qrg_substep(:, nx)
@@ -300,22 +290,16 @@ module prec_parcel_interpl
             delta_qrg_substep(:, -1)   = delta_qrg_substep(:, nx-1)
             delta_qrg_substep(:, nx)   = delta_qrg_substep(:, 0)
 
-            
-
-            ! apply free slip boundary condition
             delta_qrg_substep(0,  :) = two * delta_qrg_substep(0,  :)
             delta_qrg_substep(nz, :) = two * delta_qrg_substep(nz, :)
             delta_qrg_substep(1,    :) = delta_qrg_substep(1,    :) + delta_qrg_substep(-1,   :)
             delta_qrg_substep(nz-1, :) = delta_qrg_substep(nz-1, :) + delta_qrg_substep(nz+1, :)
             delta_qrg_substep(0:nz, :) = delta_qrg_substep(0:nz, :) / volg(0:nz, :) !   Note to divide by volg, not prec_volg!
-            ! extrapolate to halo grid points (needed to compute
+            ! set halo grid points equal to interior for conservation purposes (needed to compute
             ! z derivative used for the time step)
-            delta_qrg_substep(-1,   :) = two * delta_qrg_substep(0,  :) - delta_qrg_substep(1, :)
-            delta_qrg_substep(nz+1, :) = two * delta_qrg_substep(nz, :) - delta_qrg_substep(nz-1, :)            
-            
-        
-        
-        
-        end subroutine prec_evap2grid 
+            delta_qrg_substep(-1,   :) = delta_qrg_substep(1, :)
+            delta_qrg_substep(nz+1, :) = delta_qrg_substep(nz-1, :)
+
+        end subroutine prec_evap2grid
 
 end module prec_parcel_interpl
