@@ -1,7 +1,7 @@
  module parcel_types
     use physics, only : glat, lambda_c, q_0, qv_dens_coeff, theta_0, gravity, &
     r_d, c_p, L_v, p_surf, p_ref, pressure_scale_height,diffus,k_a,r_v,visc,sc
-    use constants, only : zero, one, f13, f12, six, fpi, three, fpi6, f14, f32, f52, pi, twopi
+    use constants, only : zero, one, two, f13, f12, six, fpi, three, fpi6, f14, f32, f52, pi, twopi
     use timer, only : start_timer, stop_timer
     use parcel_ellipsoid
     use spline_module
@@ -29,9 +29,11 @@
     double precision, parameter :: f1 = 195
     double precision, parameter :: f2 = 4085.35
     double precision, parameter :: mu = 2.5
+    double precision, parameter :: mu_cloud = 2.5
 
     ! Small number to prevent division by zero issues
     double precision, parameter :: eps_rain = 1.0e-20
+    double precision, parameter :: eps_cloud = 1.0e-20
 
     ! Constants in the ventilation
     double precision, parameter :: vent_1 = 0.78
@@ -59,6 +61,7 @@
             procedure :: split => idealised_parcel_split
             procedure :: get_buoyancy => idealised_parcel_get_buoyancy
             procedure :: saturation_adjustment => idealised_saturation_adjustment ! just a stub
+            procedure :: supersaturation => idealised_supersaturation ! also just a stub
             procedure :: merge_alloc => idealised_merge_alloc
             procedure :: merge_dealloc => idealised_merge_dealloc
             procedure :: assign_p2m => idealised_assign_p2m
@@ -75,6 +78,7 @@
         double precision, allocatable, dimension(:) :: theta
         double precision, allocatable, dimension(:) :: delta_theta
         double precision, allocatable, dimension(:) :: Nl ! optional droplet number
+        double precision, allocatable, dimension(:) :: qsat_store ! store qsat if droplet number present
         double precision, allocatable, dimension(:) :: merge_qv
         double precision, allocatable, dimension(:) :: merge_ql
         double precision, allocatable, dimension(:) :: merge_theta
@@ -87,6 +91,7 @@
             procedure :: split => realistic_parcel_split
             procedure :: get_buoyancy => realistic_parcel_get_buoyancy
             procedure :: saturation_adjustment => realistic_saturation_adjustment
+            procedure :: supersaturation => realistic_supersaturation
             procedure :: merge_alloc => realistic_merge_alloc
             procedure :: merge_dealloc => realistic_merge_dealloc
             procedure :: assign_p2m => realistic_assign_p2m
@@ -200,6 +205,8 @@
             if(this%has_droplets) then
                allocate(this%Nl(num))
                call this%register_attribute(this%Nl, "Nl", "/m^3")
+               allocate(this%qsat_store(num))
+               call this%register_attribute(this%qsat_store, "qsat_store", "kg/kg")
             endif
 
         end subroutine realistic_parcel_alloc
@@ -221,6 +228,7 @@
 
             if(this%has_droplets) then
                 call try_deallocate(this%Nl)
+                call try_deallocate(this%qsat_store)
             endif
 
             call this%ellipsoid_dealloc
@@ -252,6 +260,8 @@
             if(this%has_droplets) then
                 call resize_array(this%Nl, new_size, this%local_num)
                 call this%reset_attribute(this%Nl, "Nl")
+                call resize_array(this%qsat_store, new_size, this%local_num)
+                call this%reset_attribute(this%qsat_store, "qsat_store")
             endif
 
         end subroutine realistic_parcel_resize
@@ -357,6 +367,7 @@
             endif
             if(this%has_droplets) then
                 this%Nl(n_thread_loc) = this%Nl(n)
+                this%qsat_store(n_thread_loc) = this%qsat_store(n)
             endif
         end subroutine realistic_parcel_split
 
@@ -584,6 +595,11 @@
        subroutine idealised_saturation_adjustment(this)
             class(idealised_parcel_type), intent(inout) :: this
        end subroutine idealised_saturation_adjustment
+       
+       subroutine idealised_supersaturation(this, dt_eff)
+            class(idealised_parcel_type), intent(inout) :: this
+            double precision, intent(in) :: dt_eff
+       end subroutine idealised_supersaturation
 
        subroutine realistic_saturation_adjustment(this)
             class(realistic_parcel_type), intent(inout) :: this
@@ -608,6 +624,24 @@
             L_v_over_c_p = L_v/c_p
             n_parcel_saved=this%local_num
 
+            ! IF DROPLETS, USE CALL TO CALCULATE QSAT INSTEAD OF ADJUST
+            if(this%has_droplets) then
+                !$omp parallel default(shared)
+                !$omp do private(n, press, exn, temp, this_height) 
+                do n = 1, n_parcel_saved
+                    this_height=this%position(this%n_pos, n)
+                    press=eval_spline(press_spline, this_height)
+                    exn=eval_spline(exn_spline, this_height)
+                    temp=this%theta(n)*exn
+                    this%qsat_store(n)=qsa1/(0.01d0*press*eval_spline(esat_spline, temp)  - qsa4)
+                end do
+                !$omp end do
+                !$omp end parallel
+                call stop_timer(saturation_adjustment_timer)
+                return    
+            endif
+
+            ! ACTUAL SATURATION ADJUSTMENT
             !$omp parallel default(shared)
             !$omp do private(n, press, exn, temp, theta_start, temp_start, ql_start, qt_start, &
             !$omp            temp_low, qsat_helper, efact, qsat, ql_iter, err_at_temp, &
@@ -932,5 +966,351 @@
         deallocate(pid)  ! Deallocate pid to free memory
     end subroutine full_evap
 
+subroutine realistic_supersaturation(this,dt_eff)
+
+    class(realistic_parcel_type), intent(inout) :: this
+    double precision, intent(in) :: dt_eff
+
+    double precision :: this_height
+    double precision :: press
+    double precision :: exn
+    double precision :: temp
+    double precision :: rho_air
+
+    double precision :: qsat_old
+    double precision :: qsat_new
+
+    double precision :: qt
+
+    double precision :: delta0
+    double precision :: delta1
+
+    double precision :: tend_adiab
+
+    double precision :: abliq
+
+    double precision :: tau
+
+    double precision :: qv_target
+    double precision :: dql
+
+    integer :: n
+    integer :: n_parcel_saved
+
+    !--------------------------------------------------
+    ! Temporary aerosol assumptions
+    !--------------------------------------------------
+
+    double precision, parameter :: Nccn_total = 300.d6
+    double precision, parameter :: Sc_med     = 1.5d-3
+    double precision, parameter :: sigma_s    = 2.d0
+
+    call start_timer(saturation_adjustment_timer)
+
+    if(.not.(this%is_moist .and. this%has_droplets)) then
+        return
+    endif
+
+    if(.not.splines_are_initiated) then
+        call initiate_thermo_splines
+    endif
+
+    n_parcel_saved = this%local_num
+
+    !$omp parallel default(shared)
+    !$omp do private(n,this_height,press,exn,temp,rho_air) &
+    !$omp& private(qsat_old,qsat_new,qt) &
+    !$omp& private(delta0,delta1,tend_adiab) &
+    !$omp& private(abliq,tau) &
+    !$omp& private(qv_target,dql)
+
+    do n = 1,n_parcel_saved
+
+        !----------------------------------------------
+        ! Thermodynamics
+        !----------------------------------------------
+
+        this_height = this%position(this%n_pos,n)
+
+        press = eval_spline(press_spline,this_height)
+
+        exn = eval_spline(exn_spline,this_height)
+
+        temp = this%theta(n)*exn
+
+        rho_air = press/(r_d*temp)
+
+        qsat_old = this%qsat_store(n)
+
+        qsat_new = qsa1/( &
+             0.01d0*press*eval_spline(esat_spline,temp) &
+             - qsa4 )
+
+        qt = this%qv(n) + this%ql(n)
+
+        !----------------------------------------------
+        ! Early exit
+        !----------------------------------------------
+
+        if(this%ql(n) <= eps_cloud .and. &
+           this%qv(n) < qsat_old   .and. &
+           this%qv(n) < qsat_new) then
+
+           this%Nl(n) = 0.d0
+           this%qsat_store(n) = qsat_new
+
+           cycle
+
+        endif
+
+        !----------------------------------------------
+        ! Prognostic supersaturation variable
+        !
+        ! delta = qv - qsat
+        !----------------------------------------------
+
+        delta0 = this%qv(n) - qsat_old
+
+        !----------------------------------------------
+        ! Adiabatic forcing term
+        !----------------------------------------------
+
+        tend_adiab = (qsat_old - qsat_new)/dt_eff
+
+        !----------------------------------------------
+        ! Diffusional growth coefficient
+        !----------------------------------------------
+
+        abliq = one/( &
+             L_v*L_v/(r_v*k_a*temp*temp)*rho_air &
+           + one/(diffus*qsat_new) )
+
+        !==============================================
+        ! Predictor
+        !==============================================
+
+        call activate_ccn( &
+             max(delta0,zero), &
+             qsat_old, &
+             this%Nl(n))
+
+        call compute_tau( &
+             this%ql(n), &
+             this%Nl(n), &
+             rho_air, &
+             qsat_new, &
+             abliq, &
+             tau)
+
+        call solve_delta( &
+             delta0, &
+             tend_adiab, &
+             tau, &
+             dt_eff, &
+             delta1)
+
+        !==============================================
+        ! Corrector
+        !==============================================
+
+        call activate_ccn( &
+             max(0.5d0*(delta0+delta1),zero), &
+             qsat_old, &
+             this%Nl(n))
+
+        call compute_tau( &
+             this%ql(n), &
+             this%Nl(n), &
+             rho_air, &
+             qsat_new, &
+             abliq, &
+             tau)
+
+        call solve_delta( &
+             delta0, &
+             tend_adiab, &
+             tau, &
+             dt_eff, &
+             delta1)
+
+        !==============================================
+        ! Phase adjustment
+        !==============================================
+
+        qv_target = qsat_new + delta1
+
+        dql = this%qv(n) - qv_target
+
+        dql = min(dql,this%qv(n))
+        dql = max(dql,-this%ql(n))
+
+        this%ql(n) = this%ql(n) + dql
+
+        this%qv(n) = qt - this%ql(n)
+
+        !----------------------------------------------
+        ! Remove cloud if effectively evaporated
+        !----------------------------------------------
+
+        if(this%ql(n) <= eps_cloud) then
+
+            this%ql(n) = 0.d0
+
+            this%qv(n) = qt
+
+            this%Nl(n) = 0.d0
+
+        endif
+
+        this%qsat_store(n) = qsat_new
+
+    enddo
+
+    !$omp end do
+    !$omp end parallel
+
+    call stop_timer(saturation_adjustment_timer)
+
+contains
+
+    !==================================================
+    ! Simple one-mode lognormal activation
+    !==================================================
+
+
+subroutine activate_ccn(delta_act,qsat,Nl)
+
+    double precision, intent(in)    :: delta_act
+    double precision, intent(in)    :: qsat
+    double precision, intent(inout) :: Nl
+
+    double precision :: S_act
+    double precision :: x
+    double precision :: frac_activate
+    double precision :: Nl_activate
+
+    if(delta_act <= zero) return
+
+    S_act = max(delta_act/qsat,1.d-8)
+
+    x = (S_act/Sc_med)**0.5d0
+
+    frac_activate = x/(one + x)
+
+    Nl_activate = Nccn_total * frac_activate
+
+    Nl = max(Nl,Nl_activate)
+
+end subroutine activate_ccn
+
+!    subroutine activate_ccn(delta_act,qsat,Nl)
+!
+!        double precision, intent(in)    :: delta_act
+!        double precision, intent(in)    :: qsat
+!        double precision, intent(inout) :: Nl
+
+!        double precision :: S_act
+!        double precision :: arg
+!        double precision :: frac_activate
+!        double precision :: Nl_activate
+
+!        if(delta_act <= zero) return
+
+!        S_act = delta_act/qsat
+
+!        arg = log(S_act/Sc_med) / &
+!             (sqrt(two)*log(sigma_s))
+
+!        frac_activate = &
+!             0.5d0*(one + erf(arg))
+
+!        frac_activate = &
+!             min(one,max(zero,frac_activate))
+
+!        Nl_activate = &
+!             Nccn_total*frac_activate
+
+!        Nl = max(Nl,Nl_activate)
+
+!    end subroutine activate_ccn
+
+
+    !==================================================
+    ! Supersaturation relaxation time
+    !==================================================
+
+subroutine compute_tau( &
+    ql,Nl,rho_air,qsat,abliq,tau)
+
+    double precision, intent(in) :: ql
+    double precision, intent(in) :: Nl
+    double precision, intent(in) :: rho_air
+    double precision, intent(in) :: qsat
+    double precision, intent(in) :: abliq
+
+    double precision, intent(out) :: tau
+
+    double precision :: lambda_c
+    double precision :: r_mean
+    double precision :: ql_tau
+
+    double precision, parameter :: ql_min_tau = 1.d-5
+
+    if(Nl <= zero) then
+
+        tau = 1000.d0
+        return
+
+    endif
+
+    ql_tau = max(ql,ql_min_tau)
+
+    lambda_c = ( &
+        (pi/six)*(rho_w/rho_air) &
+       *(Nl/ql_tau) &
+       *(mu+one)*(mu+two)*(mu+three) &
+       )**f13
+
+    r_mean = (mu+one)/(two*lambda_c)
+
+    r_mean = max(r_mean,1.d-6)
+
+    tau = qsat / &
+         (two*twopi*rho_w*abliq*Nl*r_mean)
+
+    tau = min(tau,1000.d0)
+    tau = max(tau,1.d-12)
+
+end subroutine compute_tau
+
+    !==================================================
+    ! Exact solution of
+    !
+    ! d(delta)/dt = A - delta/tau
+    !==================================================
+
+    subroutine solve_delta( &
+        delta0,A,tau,dt,delta1)
+
+        double precision, intent(in) :: delta0
+        double precision, intent(in) :: A
+        double precision, intent(in) :: tau
+        double precision, intent(in) :: dt
+
+        double precision, intent(out) :: delta1
+
+        double precision :: delta_eq
+        double precision :: fac
+
+        delta_eq = A*tau
+
+        fac = exp(-dt/tau)
+
+        delta1 = delta_eq + &
+                (delta0-delta_eq)*fac
+
+    end subroutine solve_delta
+
+end subroutine realistic_supersaturation
 
 end module

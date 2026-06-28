@@ -280,9 +280,9 @@ module parcel_init
             if(l_moist) then
                 parcels%is_moist=.true.
             endif
-            if(l_droplets) then
-                parcels%has_droplets=.true.
-            endif
+            !if(l_droplets) then
+            parcels%has_droplets=.true.
+            !endif
             call parcels%alloc(max_num_parcels)
 
             call close_netcdf_file(ncid)

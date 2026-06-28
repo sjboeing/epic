@@ -226,6 +226,8 @@ module ls_rk4
             enddo
             !$omp end parallel do
 
+            call parcels%supersaturation(cb*dt)
+
             if(microphysics%l_precipitation) then
                 !$omp parallel do default(shared) private(n)
                 do n = 1, n_prec_parcels
