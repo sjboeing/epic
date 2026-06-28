@@ -64,9 +64,9 @@ module parcel_damping
                 
                 select type (parcels)
                 type is (idealised_parcel_type)
-                    call perturbation_damping_idealised(parcels, dt, .true.)
+                    call perturbation_damping_idealised(parcels, dt)
                 type is (realistic_parcel_type)
-                    call perturbation_damping_realistic(parcels, dt, .true.)
+                    call perturbation_damping_realistic(parcels, dt)
                 end select
             end if
 
@@ -125,11 +125,10 @@ module parcel_damping
 
         !
         ! @pre: the strain must be calculated and the gridded fields updated
-        subroutine perturbation_damping_idealised(parcels, dt, l_reuse)
+        subroutine perturbation_damping_idealised(parcels, dt)
             class(idealised_parcel_type), intent(inout) :: parcels
             double precision, intent(in)  :: dt
-            logical, intent(in)           :: l_reuse
-            integer                       :: n, p, l, surface_index
+            integer                       :: n, p, surface_index
             double precision              :: points(2, 2)
             double precision              :: pvol
             ! tendencies need to be summed up between associated 4 points
@@ -145,7 +144,7 @@ module parcel_damping
 
             
             !$omp parallel default(shared)
-            !$omp do private(n, p, l, points, pvol, weight, surface_index) &
+            !$omp do private(n, p, points, pvol, weight, surface_index) &
 #ifndef ENABLE_DRY_MODE
             !$omp& private(is, js, weights, vortend, humtend, dbuoytend, time_fact)
 #else
@@ -263,11 +262,10 @@ module parcel_damping
 
         !
         ! @pre: the strain must be calculated and the gridded fields updated
-        subroutine perturbation_damping_realistic(parcels, dt, l_reuse)
+        subroutine perturbation_damping_realistic(parcels, dt)
             class(realistic_parcel_type), intent(inout) :: parcels
             double precision, intent(in)  :: dt
-            logical, intent(in)           :: l_reuse
-            integer                       :: n, p, l, surface_index
+            integer                       :: n, p, surface_index
             double precision              :: points(2, 2)
             double precision              :: pvol
             ! tendencies need to be summed up between associated 4 points
@@ -282,7 +280,7 @@ module parcel_damping
 
             
             !$omp parallel default(shared)
-            !$omp do private(n, p, l, points, pvol, weight, surface_index) &
+            !$omp do private(n, p, points, pvol, weight, surface_index) &
             !$omp& private(is, js, weights, vortend, qvtend, qltend, Nltend) &
             !$omp& private(thetatend, time_fact)
             do n = 1, n_parcels
@@ -323,7 +321,7 @@ module parcel_damping
 
                     ! loop over grid points which are part of the interpolation
                     ! the weight is halved due to 2 points per ellipse
-                    weight = f12 * weights * pvol
+                    weight = f12 * weights 
 
                     if (damping%l_vorticity) then
                         ! Note this exponential factor can be different for vorticity/scalars
@@ -338,10 +336,10 @@ module parcel_damping
                         if(parcels%is_moist) then
                             qltend = qltend + sum(weight * time_fact * (qlg(js:js+1, is:is+1) - parcels%ql(n)))
                             qvtend = qvtend + sum(weight * time_fact * (qvg(js:js+1, is:is+1) - parcels%qv(n)))
-                         endif
+                        endif
                         if(parcels%has_droplets) then
                             Nltend = Nltend + sum(weight * time_fact * (Nlg(js:js+1, is:is+1) - parcels%Nl(n)))
-                         endif
+                        endif
                     endif
 
                     if (damping%l_surface_vorticity .or. damping%l_surface_scalars) then
