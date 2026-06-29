@@ -40,7 +40,7 @@
     double precision, parameter :: vent_2 = 0.31
 
     double precision :: summed_precipitation = 0.0, summed_deletion = 0.0
-
+						
     integer :: saturation_adjustment_timer
     integer :: evaporation_timer
     integer :: sedimentation_timer
@@ -622,6 +622,7 @@
             inv_p_ref = 1.0d0/p_ref
             r_d_over_c_p = r_d/c_p
             L_v_over_c_p = L_v/c_p
+            
             n_parcel_saved=this%local_num
 
             ! IF DROPLETS, USE CALL TO CALCULATE QSAT INSTEAD OF ADJUST
@@ -630,14 +631,14 @@
                 !$omp do private(n, press, exn, temp, this_height) 
                 do n = 1, n_parcel_saved
                     this_height=this%position(this%n_pos, n)
-                    !press=eval_spline(press_spline, this_height)
-                    !exn=eval_spline(exn_spline, this_height)
-                    !temp=this%theta(n)*exn
-                    !this%qsat_store(n)=qsa1/(0.01d0*press*eval_spline(esat_spline, temp)  - qsa4)
-                    press=p_surf*exp(-this_height/pressure_scale_height)
-                    exn=(press/p_ref)**(r_d/c_p)
+                    press=eval_spline(press_spline, this_height)
+                    exn=eval_spline(exn_spline, this_height)
                     temp=this%theta(n)*exn
-                    this%qsat_store(n) = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
+                    this%qsat_store(n)=qsa1/(0.01d0*press*eval_spline(esat_spline, temp)  - qsa4)
+                    !press=p_surf*exp(-this_height/pressure_scale_height)
+                    !exn=(press/p_ref)**(r_d/c_p)
+                    !temp=this%theta(n)*exn
+                    !this%qsat_store(n) = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
                 end do
                 !$omp end do
                 !$omp end parallel
@@ -727,13 +728,12 @@
     double precision :: press_heights(height_len)
     double precision :: exn_heights(height_len)
     integer :: ii
-    double precision :: inv_p_ref, r_d_over_c_p, inv_scale_height, L_v_over_c_p
+    double precision :: inv_p_ref, r_d_over_c_p, inv_scale_height
 
     inv_scale_height = 1.0d0/pressure_scale_height
     inv_p_ref = 1.0d0/p_ref
     r_d_over_c_p = r_d/c_p
-    L_v_over_c_p = L_v/c_p
-
+            
     do ii=1,temp_len
        temperatures(ii)=160.0d0+ii
        esat_temps(ii)=exp(qsa2*(temperatures(ii) - tk0c)/(temperatures(ii) - qsa3))
@@ -991,13 +991,19 @@ subroutine realistic_supersaturation(this,dt_eff)
 
     double precision :: tend_adiab
 
-    double precision :: abliq
+    double precision :: abliq_inv
 
     double precision :: tau
 
     double precision :: qv_target
     double precision :: dql
 
+    double precision :: ql
+    double precision :: qv
+    double precision :: theta
+    double precision :: Nl
+    double precision :: L_v_over_c_p
+    
     integer :: n
     integer :: n_parcel_saved
 
@@ -1007,8 +1013,19 @@ subroutine realistic_supersaturation(this,dt_eff)
 
     double precision, parameter :: Nccn_total = 300.d6
     double precision, parameter :: Sc_med     = 1.5d-3
-    double precision, parameter :: sigma_s    = 2.d0
+    ! double precision, parameter :: sigma_s    = 2.d0
     double precision, parameter :: r_activate = 2.d-6
+
+    double precision, parameter :: lambda_fac = &
+      (pi/six) * rho_w * &
+      (mu_cloud+one)*(mu_cloud+two)*(mu_cloud+three)
+    double precision, parameter :: act_fac = &
+      (3.d0/(4.d0*pi)) * &
+      ((mu_cloud+one)**2) / &
+      (rho_w*r_activate**3* &
+      (mu_cloud+two)*(mu_cloud+three))
+
+    L_v_over_c_p = L_v/c_p
 
     call start_timer(saturation_adjustment_timer)
 
@@ -1026,10 +1043,16 @@ subroutine realistic_supersaturation(this,dt_eff)
     !$omp do private(n,this_height,press,exn,temp,rho_air) &
     !$omp& private(qsat_old,qsat_new,qt) &
     !$omp& private(delta0,delta1,tend_adiab) &
-    !$omp& private(abliq,tau) &
-    !$omp& private(qv_target,dql)
+    !$omp& private(abliq_inv,tau) &
+    !$omp& private(qv_target,dql) &
+    !$omp& private(ql,qv,theta,Nl)
 
     do n = 1,n_parcel_saved
+
+        ql    = this%ql(n)
+        qv    = this%qv(n)
+        theta = this%theta(n)
+        Nl    = this%Nl(n)
 
         !----------------------------------------------
         ! Thermodynamics
@@ -1037,41 +1060,34 @@ subroutine realistic_supersaturation(this,dt_eff)
 
         this_height = this%position(this%n_pos,n)
 
-        press=p_surf*exp(-this_height/pressure_scale_height)
-        exn=(press/p_ref)**(r_d/c_p)
-        temp=this%theta(n)*exn
-        qsat_new = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
-                    
-        !press = eval_spline(press_spline,this_height)
+        press = eval_spline(press_spline,this_height)
 
-        !exn = eval_spline(exn_spline,this_height)
+        exn = eval_spline(exn_spline,this_height)
 
-        !temp = this%theta(n)*exn
-
-        rho_air = press/(r_d*temp)
+        temp = theta*exn
 
         qsat_old = this%qsat_store(n)
 
-        !qsat_new = qsa1/( &
-        !     0.01d0*press*eval_spline(esat_spline,temp) &
-        !     - qsa4 )
+        qsat_new = qsa1/( &
+             0.01d0*press*eval_spline(esat_spline,temp) &
+             - qsa4 )
 
-        qt = this%qv(n) + this%ql(n)
+        qt = qv + ql
 
         !----------------------------------------------
         ! Early exit
         !----------------------------------------------
 
-        if(this%ql(n) <= eps_cloud .and. &
-           this%qv(n) < qsat_old   .and. &
-           this%qv(n) < qsat_new) then
+        if(ql <= eps_cloud .and. &
+           qv < qsat_old   .and. &
+           qv < qsat_new) then
 
            this%Nl(n) = 0.d0
-           this%qsat_store(n) = qsat_new
-
            cycle
 
         endif
+
+        rho_air = press/(r_d*temp)
 
         !----------------------------------------------
         ! Prognostic supersaturation variable
@@ -1079,7 +1095,7 @@ subroutine realistic_supersaturation(this,dt_eff)
         ! delta = qv - qsat
         !----------------------------------------------
 
-        delta0 = this%qv(n) - qsat_old
+        delta0 = qv - qsat_old
 
         !----------------------------------------------
         ! Adiabatic forcing term
@@ -1091,26 +1107,25 @@ subroutine realistic_supersaturation(this,dt_eff)
         ! Diffusional growth coefficient
         !----------------------------------------------
 
-        abliq = one/( &
-             L_v*L_v/(r_v*k_a*temp*temp)*rho_air &
-           + one/(diffus*qsat_new) )
+        abliq_inv = (L_v*L_v/(r_v*k_a*temp*temp)*rho_air + one/(diffus*qsat_new) )
 
         !==============================================
         ! Predictor
         !==============================================
 
+        
         call activate_ccn( &
-             max(delta0,zero), &
+             delta0, &
              qsat_old, &
              rho_air, &
-             this%Nl(n))
+             Nl)
 
         call compute_tau( &
-             this%ql(n), &
-             this%Nl(n), &
+             ql, &
+             Nl, &
              rho_air, &
              qsat_new, &
-             abliq, &
+             abliq_inv, &
              tau)
 
         call solve_delta( &
@@ -1121,29 +1136,29 @@ subroutine realistic_supersaturation(this,dt_eff)
              delta1)
 
         !==============================================
-        ! Corrector
+        ! Optional corrector (no longer seems needed)
         !==============================================
 
-        call activate_ccn( &
-             max(0.5d0*(delta0+delta1),zero), &
-             qsat_old, &
-             rho_air, &
-             this%Nl(n))
+!        call activate_ccn( &
+!             0.5d0*(delta0+delta1), &
+!             qsat_old, &
+!             rho_air, &
+!             Nl)
 
-        call compute_tau( &
-             this%ql(n), &
-             this%Nl(n), &
-             rho_air, &
-             qsat_new, &
-             abliq, &
-             tau)
+!        call compute_tau( &
+!             ql, &
+!             Nl, &
+!             rho_air, &
+!             qsat_new, &
+!             abliq, &
+!             tau)
 
-        call solve_delta( &
-             delta0, &
-             tend_adiab, &
-             tau, &
-             dt_eff, &
-             delta1)
+!        call solve_delta( &
+!             delta0, &
+!             tend_adiab, &
+!             tau, &
+!             dt_eff, &
+!             delta1)
 
         !==============================================
         ! Phase adjustment
@@ -1151,29 +1166,35 @@ subroutine realistic_supersaturation(this,dt_eff)
 
         qv_target = qsat_new + delta1
 
-        dql = this%qv(n) - qv_target
+        dql = qv - qv_target
 
-        dql = min(dql,this%qv(n))
-        dql = max(dql,-this%ql(n))
+        dql = min(dql,qv)
+        dql = max(dql,-ql)
 
-        this%ql(n) = this%ql(n) + dql
-        this%theta(n) = this%theta(n) + (L_v/(c_p*exn))*dql
+        ql = ql + dql
 
-        this%qv(n) = qt - this%ql(n)
+        theta = theta + (L_v_over_c_p/exn)*dql
+
+        qv = qt - ql
 
         !----------------------------------------------
         ! Remove cloud if effectively evaporated
         !----------------------------------------------
 
-        if(this%ql(n) <= eps_cloud) then
+        if(ql <= eps_cloud) then
 
-            this%ql(n) = 0.d0
+            ql = 0.d0
 
-            this%qv(n) = qt
+            qv = qt
 
-            this%Nl(n) = 0.d0
+            Nl = 0.d0
 
         endif
+
+        this%ql(n) = ql
+        this%qv(n) = qv
+        this%theta(n) = theta
+        this%Nl(n) = Nl
 
     enddo
 
@@ -1185,113 +1206,105 @@ subroutine realistic_supersaturation(this,dt_eff)
 contains
 
     !==================================================
-    ! Simple one-mode lognormal activation
+    ! Simple Twomey activation
     !==================================================
-
-
-subroutine activate_ccn(delta_act,qsat,rho_air,Nl)
-
-    double precision, intent(in)    :: delta_act
-    double precision, intent(in)    :: qsat
-    double precision, intent(in)    :: rho_air
-    double precision, intent(inout) :: Nl
-
-    double precision :: S_act
-    double precision :: x
-    double precision :: frac_activate
-    double precision :: Nl_activate
-
-    double precision :: Nl_max
-
-    if(delta_act <= zero) return
-
-    S_act = max(delta_act/qsat,1.d-8)
-
-    x = (S_act/Sc_med)**0.5d0
-
-    frac_activate = x/(one + x)
-
-    Nl_activate = Nccn_total*frac_activate
-
-    !------------------------------------------
-    ! Gamma-PSD-consistent minimum activation
-    ! radius constraint.
-    !
-    ! Assume the available condensate associated
-    ! with activation is delta_act and require
-    ! r_mean >= r_activate using the same PSD
-    ! definitions as compute_tau.
-    !------------------------------------------
-
-    Nl_max = delta_act * &
-         (3.d0/(4.d0*pi)) * &
-         (rho_air/rho_w) * &
-         ((mu_cloud+one)**2) / &
-         (r_activate**3 * &
-          (mu_cloud+two)*(mu_cloud+three))
-
-    Nl_activate = min(Nl_activate,Nl_max)
-
-    Nl = max(Nl,Nl_activate)
-
-end subroutine activate_ccn
+    
+    pure subroutine activate_ccn(delta_act,qsat,rho_air,Nl)
+    
+        double precision, intent(in)    :: delta_act
+        double precision, intent(in)    :: qsat
+        double precision, intent(in)    :: rho_air
+        double precision, intent(inout) :: Nl
+    
+        double precision :: S_act
+        double precision :: x
+        double precision :: frac_activate
+        double precision :: Nl_activate
+    
+        double precision :: Nl_max
+    
+        if(delta_act <= zero) return
+    
+        S_act = max(delta_act/qsat,1.d-8)
+    
+        x = sqrt(S_act/Sc_med)
+    
+        frac_activate = x/(one + x)
+    
+        Nl_activate = Nccn_total*frac_activate
+    
+        !------------------------------------------
+        ! Gamma-PSD-consistent minimum activation
+        ! radius constraint.
+        !
+        ! Assume the available condensate associated
+        ! with activation is delta_act and require
+        ! r_mean >= r_activate using the same PSD
+        ! definitions as compute_tau.
+        !------------------------------------------
+    
+        Nl_max = delta_act*rho_air*act_fac
+    
+        Nl_activate = min(Nl_activate,Nl_max)
+    
+        Nl = max(Nl,Nl_activate)
+    
+    end subroutine activate_ccn
 
     !==================================================
     ! Supersaturation relaxation time
     !==================================================
+    
+    pure subroutine compute_tau( &
+        ql,Nl,rho_air,qsat,abliq_inv,tau)
+    
+        double precision, intent(in) :: ql
+        double precision, intent(in) :: Nl
+        double precision, intent(in) :: rho_air
+        double precision, intent(in) :: qsat
+        double precision, intent(in) :: abliq_inv
+    
+        double precision, intent(out) :: tau
+    
+        double precision :: lambda_c
+        double precision :: r_mean
+        double precision :: arg
+    
+        if(Nl <= zero) then
+    
+            tau = 1000.d0
+            return
+    
+        endif
+    
+        if(ql > zero) then
+    
+           arg = lambda_fac * Nl / (rho_air*ql)
 
-subroutine compute_tau( &
-    ql,Nl,rho_air,qsat,abliq,tau)
-
-    double precision, intent(in) :: ql
-    double precision, intent(in) :: Nl
-    double precision, intent(in) :: rho_air
-    double precision, intent(in) :: qsat
-    double precision, intent(in) :: abliq
-
-    double precision, intent(out) :: tau
-
-    double precision :: lambda_c
-    double precision :: r_mean
-
-
-    if(Nl <= zero) then
-
-        tau = 1000.d0
-        return
-
-    endif
-
-    if(ql > zero) then
-
-        lambda_c = ( &
-            (pi/six)*(rho_w/rho_air) &
-           *(Nl/ql) &
-           *(mu_cloud+one)*(mu_cloud+two)*(mu_cloud+three) &
-           )**f13
-
-        r_mean = (mu_cloud+one)/(two*lambda_c)
-
-    else
-
-        r_mean = r_activate
-
-    endif
-
-    !------------------------------------------
-    ! Activated droplets cannot be smaller than
-    ! the activation radius.
-    !------------------------------------------
-
-    r_mean = max(r_mean,r_activate)
-
-    tau = qsat / &
-         (two*twopi*rho_w*abliq*Nl*r_mean)
-
-    tau = min(tau,1000.d0)
-    tau = max(tau,1.d-12)
-
-end subroutine compute_tau
+           lambda_c = arg**f13
+    
+           r_mean = (mu_cloud+one)/(two*lambda_c)
+    
+        else
+    
+            r_mean = r_activate
+    
+        endif
+    
+        !------------------------------------------
+        ! Activated droplets cannot be smaller than
+        ! the activation radius.
+        !------------------------------------------
+    
+        r_mean = max(r_mean,r_activate)
+    
+        tau = qsat*abliq_inv / &
+             (two*twopi*rho_w*Nl*r_mean)
+    
+        tau = min(tau,1000.d0)
+        tau = max(tau,1.d-12)
+    
+    end subroutine compute_tau
 
     !==================================================
     ! Exact solution of
@@ -1299,26 +1312,26 @@ end subroutine compute_tau
     ! d(delta)/dt = A - delta/tau
     !==================================================
 
-    subroutine solve_delta( &
+    pure subroutine solve_delta( &
         delta0,A,tau,dt,delta1)
-
+    
         double precision, intent(in) :: delta0
         double precision, intent(in) :: A
         double precision, intent(in) :: tau
         double precision, intent(in) :: dt
-
+    
         double precision, intent(out) :: delta1
-
+    
         double precision :: delta_eq
         double precision :: fac
-
+    
         delta_eq = A*tau
-
+    
         fac = exp(-dt/tau)
-
+    
         delta1 = delta_eq + &
                 (delta0-delta_eq)*fac
-
+    
     end subroutine solve_delta
 
 end subroutine realistic_supersaturation
