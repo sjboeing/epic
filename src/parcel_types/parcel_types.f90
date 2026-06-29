@@ -1008,6 +1008,7 @@ subroutine realistic_supersaturation(this,dt_eff)
     double precision, parameter :: Nccn_total = 300.d6
     double precision, parameter :: Sc_med     = 1.5d-3
     double precision, parameter :: sigma_s    = 2.d0
+    double precision, parameter :: r_activate = 2.d-6
 
     call start_timer(saturation_adjustment_timer)
 
@@ -1101,6 +1102,7 @@ subroutine realistic_supersaturation(this,dt_eff)
         call activate_ccn( &
              max(delta0,zero), &
              qsat_old, &
+             rho_air, &
              this%Nl(n))
 
         call compute_tau( &
@@ -1125,6 +1127,7 @@ subroutine realistic_supersaturation(this,dt_eff)
         call activate_ccn( &
              max(0.5d0*(delta0+delta1),zero), &
              qsat_old, &
+             rho_air, &
              this%Nl(n))
 
         call compute_tau( &
@@ -1186,16 +1189,19 @@ contains
     !==================================================
 
 
-subroutine activate_ccn(delta_act,qsat,Nl)
+subroutine activate_ccn(delta_act,qsat,rho_air,Nl)
 
     double precision, intent(in)    :: delta_act
     double precision, intent(in)    :: qsat
+    double precision, intent(in)    :: rho_air
     double precision, intent(inout) :: Nl
 
     double precision :: S_act
     double precision :: x
     double precision :: frac_activate
     double precision :: Nl_activate
+
+    double precision :: Nl_max
 
     if(delta_act <= zero) return
 
@@ -1205,14 +1211,30 @@ subroutine activate_ccn(delta_act,qsat,Nl)
 
     frac_activate = x/(one + x)
 
-    Nl_activate = Nccn_total * frac_activate
+    Nl_activate = Nccn_total*frac_activate
+
+    !------------------------------------------
+    ! Gamma-PSD-consistent minimum activation
+    ! radius constraint.
+    !
+    ! Assume the available condensate associated
+    ! with activation is delta_act and require
+    ! r_mean >= r_activate using the same PSD
+    ! definitions as compute_tau.
+    !------------------------------------------
+
+    Nl_max = delta_act * &
+         (3.d0/(4.d0*pi)) * &
+         (rho_air/rho_w) * &
+         ((mu_cloud+one)**2) / &
+         (r_activate**3 * &
+          (mu_cloud+two)*(mu_cloud+three))
+
+    Nl_activate = min(Nl_activate,Nl_max)
 
     Nl = max(Nl,Nl_activate)
 
 end subroutine activate_ccn
-
-
-
 
     !==================================================
     ! Supersaturation relaxation time
@@ -1232,7 +1254,6 @@ subroutine compute_tau( &
     double precision :: lambda_c
     double precision :: r_mean
 
-    double precision, parameter :: r_activate = 2.d-6
 
     if(Nl <= zero) then
 
@@ -1246,10 +1267,10 @@ subroutine compute_tau( &
         lambda_c = ( &
             (pi/six)*(rho_w/rho_air) &
            *(Nl/ql) &
-           *(mu+one)*(mu+two)*(mu+three) &
+           *(mu_cloud+one)*(mu_cloud+two)*(mu_cloud+three) &
            )**f13
 
-        r_mean = (mu+one)/(two*lambda_c)
+        r_mean = (mu_cloud+one)/(two*lambda_c)
 
     else
 
