@@ -1,7 +1,7 @@
 module spline_module
   implicit none
   private
-  public :: spline, init_spline, eval_spline
+  public :: spline, init_spline, eval_spline, eval_two_splines
 
   type :: spline
      integer :: n, nmin1
@@ -74,26 +74,63 @@ contains
     deallocate(y2, u)
   end subroutine init_spline
 
-  function eval_spline(this, xval) result(yval)
+  ! Use Horner's approach
+  pure function eval_spline(this, xval) result(yval)
+
     type(spline), intent(in) :: this
     double precision, intent(in) :: xval
     double precision :: yval
+
     integer :: i
-    double precision :: dx, dx2, dx3
+    double precision :: dx
 
     i = int((xval - this%x1) * this%inv_h) + 1
 
-    if(i<1) then
-       i=1
-    elseif(i>this%nmin1) then
-       i=this%nmin1
-    end if
+    if(i < 1) then
+       i = 1
+    elseif(i > this%nmin1) then
+       i = this%nmin1
+    endif
 
     dx = xval - this%x(i)
-    dx2 = dx * dx
-    dx3 = dx2 * dx
 
-    yval = this%A(i) + this%B(i)*dx + this%C(i)*dx2 + this%D(i)*dx3
+    yval = this%A(i) + dx*( &
+           this%B(i) + dx*( &
+           this%C(i) + dx*this%D(i) ) )
+
   end function eval_spline
+
+  pure subroutine eval_two_splines( &
+    spline1,spline2,xval,y1,y2)
+
+    type(spline), intent(in) :: spline1
+    type(spline), intent(in) :: spline2
+
+    double precision, intent(in)  :: xval
+    double precision, intent(out) :: y1
+    double precision, intent(out) :: y2
+
+    integer :: i
+    double precision :: dx
+
+    i = int((xval - spline1%x1) * spline1%inv_h) + 1
+
+    if(i < 1) then
+        i = 1
+    elseif(i > spline1%nmin1) then
+        i = spline1%nmin1
+    endif
+
+    dx = xval - spline1%x(i)
+
+    y1 = spline1%A(i) + dx*( &
+         spline1%B(i) + dx*( &
+         spline1%C(i) + dx*spline1%D(i)))
+
+    y2 = spline2%A(i) + dx*( &
+         spline2%B(i) + dx*( &
+         spline2%C(i) + dx*spline2%D(i)))
+
+  end subroutine eval_two_splines
 
 end module spline_module

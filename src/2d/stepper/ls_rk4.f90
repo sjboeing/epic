@@ -226,7 +226,9 @@ module ls_rk4
             enddo
             !$omp end parallel do
 
+            call stop_timer(rk4_timer)
             call parcels%supersaturation(cb*dt)
+            call start_timer(rk4_timer)
 
             if(microphysics%l_precipitation) then
                 !$omp parallel do default(shared) private(n)
