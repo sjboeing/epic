@@ -41,6 +41,8 @@ module ls_rk4
                  3134564353537.0_dp/4481467310338.0_dp,  &
                  2277821191437.0_dp/14882151754819.0_dp/)
 
+    double precision                :: time_tend
+
     contains
 
         ! Advances the parcels by a single ls-RK-4 step. It calls a
@@ -77,6 +79,8 @@ module ls_rk4
 
             ! update the time step
             dt = get_time_step(t)
+            time_tend=0.0
+
             !------------------grid2par-------------------
             !Change 2: move grid2par
             if(microphysics%l_precipitation) then
@@ -111,7 +115,6 @@ module ls_rk4
             call calculate_field_diagnostics
 
             call write_step(t)
-
 
             do n = 1, 4
                 call ls_rk4_substep(dt, n)
@@ -226,8 +229,9 @@ module ls_rk4
             enddo
             !$omp end parallel do
 
+            time_tend=time_tend+1.0d0
             call stop_timer(rk4_timer)
-            call parcels%supersaturation(cb*dt)
+            call parcels%supersaturation(time_tend*cb*dt) !effective microphysics timestep
             call start_timer(rk4_timer)
 
             if(microphysics%l_precipitation) then
@@ -267,6 +271,8 @@ module ls_rk4
             endif
 
             call start_timer(rk4_timer)
+
+            time_tend=time_tend*ca
 
             !$omp parallel do default(shared) private(n)
             do n = 1, n_parcels

@@ -631,13 +631,13 @@
                 !$omp do private(n, press, exn, temp, this_height) 
                 do n = 1, n_parcel_saved
                     this_height=this%position(this%n_pos, n)
-                    !call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
-                    !temp=this%theta(n)*exn
-                    !this%qsat_store(n)=qsa1/(0.01d0*press*eval_spline(esat_spline, temp)  - qsa4)
-                    press=p_surf*exp(-this_height/pressure_scale_height)
-                    exn=(press/p_ref)**(r_d/c_p)
+                    call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
                     temp=this%theta(n)*exn
-                    this%qsat_store(n) = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
+                    this%qsat_store(n)=qsa1/(0.01d0*press*eval_spline(esat_spline, temp)  - qsa4)
+                    !press=p_surf*exp(-this_height/pressure_scale_height)
+                    !exn=(press/p_ref)**(r_d/c_p)
+                    !temp=this%theta(n)*exn
+                    !this%qsat_store(n) = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
                 end do
                 !$omp end do
                 !$omp end parallel
@@ -984,8 +984,7 @@ subroutine realistic_supersaturation(this,dt_eff)
 
     double precision :: qt
 
-    double precision :: delta0
-    double precision :: delta1
+    double precision :: delta
 
     double precision :: tend_adiab
 
@@ -1005,15 +1004,20 @@ subroutine realistic_supersaturation(this,dt_eff)
     integer :: n
     integer :: n_parcel_saved
 
+    integer :: nsub
+    integer :: isub
+
+    double precision :: dt_sub
+
     !--------------------------------------------------
     ! Temporary aerosol assumptions
-    !--------------------------------------------------
+     !--------------------------------------------------
 
     double precision, parameter :: Nccn_total = 300.d6
     double precision, parameter :: Sc_med     = 1.5d-3
-    ! double precision, parameter :: sigma_s    = 2.d0
     double precision, parameter :: r_activate = 2.d-6
-    double precision, parameter :: G_cond = 1.0d-10
+    double precision :: dt_micro = 1.0 !subtimestep needed for activation
+    double precision :: G_cond_inv
 
     double precision, parameter :: lambda_fac = &
       (pi/six) * rho_w * &
@@ -1037,14 +1041,18 @@ subroutine realistic_supersaturation(this,dt_eff)
     endif
 
     n_parcel_saved = this%local_num
+    
+    nsub = ceiling(dt_eff/dt_micro)
+    dt_sub = dt_eff/dble(nsub)
 
     !$omp parallel default(shared)
     !$omp do private(n,this_height,press,exn,temp,rho_air) &
     !$omp& private(qsat_old,qsat_new,qt) &
-    !$omp& private(delta0,delta1,tend_adiab) &
+    !$omp& private(delta,tend_adiab) &
     !$omp& private(abliq_inv,tau) &
     !$omp& private(qv_target,dql) &
-    !$omp& private(ql,qv,theta,Nl)
+    !$omp& private(ql,qv,theta,Nl, G_cond_inv) &
+    !$omp& private(isub)
 
     do n = 1,n_parcel_saved
 
@@ -1058,18 +1066,19 @@ subroutine realistic_supersaturation(this,dt_eff)
         !----------------------------------------------
 
         this_height = this%position(this%n_pos,n)
-        press=p_surf*exp(-this_height/pressure_scale_height)
-        exn=(press/p_ref)**(r_d/c_p)
-        temp=this%theta(n)*exn
-        qsat_new = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
+        !press=p_surf*exp(-this_height/pressure_scale_height)
+        !exn=(press/p_ref)**(r_d/c_p)
+        !temp=this%theta(n)*exn
+        !qsat_new = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
 
-        !call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
+        call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
+        
+        ! New q_sat and new temperature if no condensation or evaporation takes place
+        temp = theta*exn
 
-        !temp = theta*exn
-
-        !qsat_new = qsa1/( &
-        !     0.01d0*press*eval_spline(esat_spline,temp) &
-        !     - qsa4 )
+        qsat_new = qsa1/( &
+             0.01d0*press*eval_spline(esat_spline,temp) &
+             - qsa4 )
 
         qsat_old = this%qsat_store(n)
 
@@ -1096,10 +1105,10 @@ subroutine realistic_supersaturation(this,dt_eff)
         ! delta = qv - qsat
         !----------------------------------------------
 
-        delta0 = qv - qsat_old
+        delta = qv - qsat_old
 
         !----------------------------------------------
-        ! Adiabatic forcing term
+        ! Change in q_sat without phase changes
         !----------------------------------------------
 
         tend_adiab = (qsat_old - qsat_new)/dt_eff
@@ -1110,89 +1119,71 @@ subroutine realistic_supersaturation(this,dt_eff)
 
         abliq_inv = (L_v*L_v/(r_v*k_a*temp*temp)*rho_air + one/(diffus*qsat_new) )
 
-        !==============================================
-        ! Predictor
-        !==============================================
-
-        
-        call activate_ccn( &
-             delta0, &
-             qsat_old, &
-             rho_air, &
-             dt_eff, &
-             Nl)
-
-        call compute_tau( &
-             ql, &
-             Nl, &
-             rho_air, &
-             qsat_new, &
-             abliq_inv, &
-             tau)
-
-        call solve_delta( &
-             delta0, &
-             tend_adiab, &
-             tau, &
-             dt_eff, &
-             delta1)
+        G_cond_inv = (rho_w*abliq_inv)
 
         !==============================================
-        ! Optional corrector (not sure if needed)
+        ! Subcycling of activation / supersaturation
         !==============================================
 
-        !call activate_ccn( &
-        !     0.5d0*(delta0+delta1), &
-        !     qsat_old, &
-        !     rho_air, &
-        !     dt_eff, &
-        !     Nl)
+        do isub = 1,nsub
 
-        !call compute_tau( &
-        !     ql, &
-        !     Nl, &
-        !     rho_air, &
-        !     qsat_new, &
-        !     abliq_inv, &
-        !     tau)
+           call activate_ccn( &
+                delta, &
+                ql, &
+                qsat_old, &
+                rho_air, &
+                dt_sub, &
+                G_cond_inv, &
+                Nl)
 
-        !call solve_delta( &
-        !     delta0, &
-        !     tend_adiab, &
-        !     tau, &
-        !     dt_eff, &
-        !     delta1)
+           call compute_tau( &
+                ql, &
+                Nl, &
+                rho_air, &
+                qsat_new, &
+                abliq_inv, &
+                tau)
+
+           call solve_delta( &
+                delta, &
+                tend_adiab, &
+                tau, &
+                dt_sub)
+
+            qv_target = qsat_old + dble(isub)/dble(nsub) * (qsat_new - qsat_old) + delta
+
+            dql = qv - qv_target
+
+            dql = min(dql,qv)
+            dql = max(dql,-ql)
+
+            ql = ql + dql
+
+            theta = theta + (L_v_over_c_p/exn)*dql
+
+            qv = qt - ql
+           
+            ! Remove cloud if effectively evaporated
+            !----------------------------------------------
+
+            if(ql <= eps_cloud) then
+
+                ql = 0.d0
+
+                qv = qt
+
+                Nl = 0.d0
+
+            endif
+
+            ! Correct delta with limiters (for further integration)            
+            delta = delta + (qv - qv_target) 
+
+        enddo
 
         !==============================================
         ! Phase adjustment
         !==============================================
-
-        qv_target = qsat_new + delta1
-
-        dql = qv - qv_target
-
-        dql = min(dql,qv)
-        dql = max(dql,-ql)
-
-        ql = ql + dql
-
-        theta = theta + (L_v_over_c_p/exn)*dql
-
-        qv = qt - ql
-
-        !----------------------------------------------
-        ! Remove cloud if effectively evaporated
-        !----------------------------------------------
-
-        if(ql <= eps_cloud) then
-
-            ql = 0.d0
-
-            qv = qt
-
-            Nl = 0.d0
-
-        endif
 
         this%ql(n) = ql
         this%qv(n) = qv
@@ -1212,12 +1203,14 @@ contains
     ! Simple Twomey activation
     !==================================================
     
-    pure subroutine activate_ccn(delta_act,qsat,rho_air,dt,Nl)
+    pure subroutine activate_ccn(delta_act,ql,qsat,rho_air,dt,G_cond_inv,Nl)
     
         double precision, intent(in)    :: delta_act
+        double precision, intent(in)    :: ql
         double precision, intent(in)    :: qsat
         double precision, intent(in)    :: rho_air
         double precision, intent(in)    :: dt
+        double precision, intent(in)    :: G_cond_inv
         double precision, intent(inout) :: Nl
     
         double precision :: S_act
@@ -1232,22 +1225,21 @@ contains
     
         if(delta_act <= zero) return
         
-        Nl_max = delta_act*rho_air*act_fac
+        Nl_max = (delta_act+ql)*rho_air*act_fac
    
         if(Nl >= Nl_max) then
-           Nl = Nl_max
            return
         endif
 
         S_act = max(delta_act/qsat,1.d-8)
         ! tau_act = r_activate**2 / (2.d0*G_cond*max(S_act,1.d-8))
-        tau_act = r_activate**2 / &
-          (2.d0*G_cond*max(S_act,1.d-8))
+        tau_act = G_cond_inv*r_activate**2 / &
+          (2.d0*max(S_act,1.d-8))
         ! limiters
-        tau_act = max(1.d0, tau_act)
+        tau_act = max(0.1d0, tau_act)
         tau_act = min(30.d0, tau_act)
 
-        x = sqrt(S_act/Sc_med)
+        x = (S_act/Sc_med)**(1.0/3.0)
     
         frac_activate = x/(one + x)
         
@@ -1334,14 +1326,12 @@ contains
     !==================================================
 
     pure subroutine solve_delta( &
-        delta0,A,tau,dt,delta1)
+        delta,A,tau,dt)
     
-        double precision, intent(in) :: delta0
+        double precision, intent(inout) :: delta
         double precision, intent(in) :: A
         double precision, intent(in) :: tau
         double precision, intent(in) :: dt
-    
-        double precision, intent(out) :: delta1
     
         double precision :: delta_eq
         double precision :: fac
@@ -1350,8 +1340,8 @@ contains
         
         fac = exp(-dt/tau)
         
-        delta1 = delta_eq + &
-                (delta0-delta_eq)*fac
+        delta = delta_eq + &
+                (delta-delta_eq)*fac
     
     end subroutine solve_delta
 
@@ -1359,6 +1349,7 @@ end subroutine realistic_supersaturation
 
 !    subroutine activate_ccn(delta_act,qsat,Nl)
 !
+!        double precision, parameter :: sigma_s    = 2.d0
 !        double precision, intent(in)    :: delta_act
 !        double precision, intent(in)    :: qsat
 !        double precision, intent(inout) :: Nl
