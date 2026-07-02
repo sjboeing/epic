@@ -627,20 +627,6 @@
 
             ! IF DROPLETS, USE CALL TO CALCULATE QSAT INSTEAD OF ADJUST
             if(this%has_droplets) then
-                !$omp parallel default(shared)
-                !$omp do private(n, press, exn, temp, this_height) 
-                do n = 1, n_parcel_saved
-                    this_height=this%position(this%n_pos, n)
-                    call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
-                    temp=this%theta(n)*exn
-                    this%qsat_store(n)=qsa1/(0.01d0*press*eval_spline(esat_spline, temp)  - qsa4)
-                    !press=p_surf*exp(-this_height/pressure_scale_height)
-                    !exn=(press/p_ref)**(r_d/c_p)
-                    !temp=this%theta(n)*exn
-                    !this%qsat_store(n) = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
-                end do
-                !$omp end do
-                !$omp end parallel
                 call stop_timer(saturation_adjustment_timer)
                 return    
             endif
@@ -1006,6 +992,7 @@ subroutine realistic_supersaturation(this,dt_eff)
 
     integer :: nsub
     integer :: isub
+    integer :: i_condense
 
     double precision :: dt_sub
 
@@ -1016,7 +1003,7 @@ subroutine realistic_supersaturation(this,dt_eff)
     double precision, parameter :: Nccn_total = 300.d6
     double precision, parameter :: Sc_med     = 1.5d-3
     double precision, parameter :: r_activate = 2.d-6
-    double precision :: dt_micro = 1.0 !subtimestep needed for activation
+    double precision :: dt_micro = 1.0 !subtimestep needed for activation to be represented OK
     double precision :: G_cond_inv
 
     double precision, parameter :: lambda_fac = &
@@ -1027,6 +1014,7 @@ subroutine realistic_supersaturation(this,dt_eff)
       ((mu_cloud+one)**2) / &
       (rho_w*r_activate**3* &
       (mu_cloud+two)*(mu_cloud+three))
+    logical :: l_warn
 
     L_v_over_c_p = L_v/c_p
 
@@ -1045,6 +1033,8 @@ subroutine realistic_supersaturation(this,dt_eff)
     nsub = ceiling(dt_eff/dt_micro)
     dt_sub = dt_eff/dble(nsub)
 
+    l_warn=.false.
+
     !$omp parallel default(shared)
     !$omp do private(n,this_height,press,exn,temp,rho_air) &
     !$omp& private(qsat_old,qsat_new,qt) &
@@ -1052,37 +1042,49 @@ subroutine realistic_supersaturation(this,dt_eff)
     !$omp& private(abliq_inv,tau) &
     !$omp& private(qv_target,dql) &
     !$omp& private(ql,qv,theta,Nl, G_cond_inv) &
-    !$omp& private(isub)
-
+    !$omp& private(isub, i_condense) &
+    !$omp& reduction(.or.:l_warn)
     do n = 1,n_parcel_saved
 
         ql    = this%ql(n)
         qv    = this%qv(n)
         theta = this%theta(n)
         Nl    = this%Nl(n)
-
+        
         !----------------------------------------------
-        ! Thermodynamics
+        ! For conservation
         !----------------------------------------------
 
-        this_height = this%position(this%n_pos,n)
-        !press=p_surf*exp(-this_height/pressure_scale_height)
-        !exn=(press/p_ref)**(r_d/c_p)
-        !temp=this%theta(n)*exn
-        !qsat_new = qsa1/(0.01d0*press*exp(qsa2*(temp - tk0c)/(temp - qsa3)) - qsa4)
+        qt = qv + ql
+        
+        !----------------------------------------------
+        ! Thermodynamics: try full time step integration first
+        !----------------------------------------------
+        
+        this_height = this%position(this%n_pos,n)+dt_eff*this%delta_pos(this%n_pos,n)
 
         call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
         
-        ! New q_sat and new temperature if no condensation or evaporation takes place
         temp = theta*exn
 
         qsat_new = qsa1/( &
              0.01d0*press*eval_spline(esat_spline,temp) &
              - qsa4 )
 
-        qsat_old = this%qsat_store(n)
 
-        qt = qv + ql
+        !----------------------------------------------
+        ! Store old value for temp, pos etc for further usage if needed
+        !----------------------------------------------
+
+        this_height = this%position(this%n_pos,n)
+
+        call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
+        
+        temp = theta*exn
+
+        qsat_old = qsa1/( &
+             0.01d0*press*eval_spline(esat_spline,temp) &
+             - qsa4 )
 
         !----------------------------------------------
         ! Early exit
@@ -1096,8 +1098,7 @@ subroutine realistic_supersaturation(this,dt_eff)
            cycle
 
         endif
-
-        rho_air = press/(r_d*temp)
+        
 
         !----------------------------------------------
         ! Prognostic supersaturation variable
@@ -1113,24 +1114,20 @@ subroutine realistic_supersaturation(this,dt_eff)
 
         tend_adiab = (qsat_old - qsat_new)/dt_eff
 
-        !----------------------------------------------
-        ! Diffusional growth coefficient
-        !----------------------------------------------
-
-        abliq_inv = (L_v*L_v/(r_v*k_a*temp*temp)*rho_air + one/(diffus*qsat_new) )
-
-        G_cond_inv = (rho_w*abliq_inv)
-
-        !==============================================
-        ! Subcycling of activation / supersaturation
-        !==============================================
-
+        qsat_new=qsat_old
+        
         do isub = 1,nsub
+
+           rho_air = press/(r_d*temp)
+
+           abliq_inv = (L_v*L_v/(r_v*k_a*temp*temp)*rho_air + one/(diffus*qsat_new) )
+
+           G_cond_inv = (rho_w*abliq_inv)
 
            call activate_ccn( &
                 delta, &
                 ql, &
-                qsat_old, &
+                qsat_new, &
                 rho_air, &
                 dt_sub, &
                 G_cond_inv, &
@@ -1150,34 +1147,52 @@ subroutine realistic_supersaturation(this,dt_eff)
                 tau, &
                 dt_sub)
 
-            qv_target = qsat_old + dble(isub)/dble(nsub) * (qsat_new - qsat_old) + delta
+           this_height = this%position(this%n_pos,n)+isub*dt_sub*this%delta_pos(this%n_pos,n)
+           call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
 
-            dql = qv - qv_target
+           do i_condense= 1,10
+             temp = theta*exn
 
-            dql = min(dql,qv)
-            dql = max(dql,-ql)
+             qsat_new = qsa1/( &
+                0.01d0*press*eval_spline(esat_spline,temp) &
+                - qsa4 )
+              
+             qv_target = qsat_new + delta
 
-            ql = ql + dql
+             dql = qv - qv_target
 
-            theta = theta + (L_v_over_c_p/exn)*dql
+             dql = min(dql,qv)
+             dql = max(dql,-ql)
 
-            qv = qt - ql
+             ql = ql + dql
+
+             theta = theta + (L_v_over_c_p/exn)*dql
+
+             qv = qt - ql
            
-            ! Remove cloud if effectively evaporated
-            !----------------------------------------------
+             ! Remove cloud if effectively evaporated
+             !----------------------------------------------
 
-            if(ql <= eps_cloud) then
+             if(ql <= eps_cloud) then
+ 
+               ql = 0.d0
 
-                ql = 0.d0
+               qv = qt
 
-                qv = qt
+               Nl = 0.d0
 
-                Nl = 0.d0
+             endif
 
-            endif
+             if(abs(dql) < 1.d-5) exit
 
-            ! Correct delta with limiters (for further integration)            
-            delta = delta + (qv - qv_target) 
+             if(i_condense==10) then
+                 l_warn=.true.
+             endif
+
+           enddo 
+
+           ! Correct delta with limiters (for further integration)            
+           delta = delta + (qv - qv_target) 
 
         enddo
 
@@ -1196,6 +1211,10 @@ subroutine realistic_supersaturation(this,dt_eff)
     !$omp end parallel
 
     call stop_timer(saturation_adjustment_timer)
+    
+    if(l_warn) then
+       write(*,*) "thermodynamics not converging" 
+    endif
 
 contains
 
@@ -1225,11 +1244,9 @@ contains
     
         if(delta_act <= zero) return
         
-        Nl_max = (delta_act+ql)*rho_air*act_fac
+        Nl_max = delta_act*rho_air*act_fac
    
-        if(Nl >= Nl_max) then
-           return
-        endif
+        if(Nl >= Nl_max) return
 
         S_act = max(delta_act/qsat,1.d-8)
         ! tau_act = r_activate**2 / (2.d0*G_cond*max(S_act,1.d-8))
