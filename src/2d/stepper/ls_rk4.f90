@@ -214,6 +214,12 @@ module ls_rk4
             endif
 
             call start_timer(rk4_timer)
+            
+            ! DO THE MICROPHYSICS LOOP HERE, AFTER WE KNOW DELTA_POS 
+            time_tend=time_tend+1.0d0
+            call stop_timer(rk4_timer)
+            call parcels%supersaturation(time_tend*cb*dt) !effective microphysics timestep
+            call start_timer(rk4_timer)
 
             !$omp parallel do default(shared) private(n)
             do n = 1, n_parcels
@@ -229,10 +235,6 @@ module ls_rk4
             enddo
             !$omp end parallel do
 
-            time_tend=time_tend+1.0d0
-            call stop_timer(rk4_timer)
-            call parcels%supersaturation(time_tend*cb*dt) !effective microphysics timestep
-            call start_timer(rk4_timer)
 
             if(microphysics%l_precipitation) then
                 !$omp parallel do default(shared) private(n)
