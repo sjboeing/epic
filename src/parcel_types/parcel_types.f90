@@ -978,9 +978,6 @@ subroutine realistic_supersaturation(this,dt_eff)
 
     double precision :: tau
 
-    double precision :: qv_target
-    double precision :: dql
-
     double precision :: ql
     double precision :: qv
     double precision :: theta
@@ -992,13 +989,27 @@ subroutine realistic_supersaturation(this,dt_eff)
 
     integer :: nsub
     integer :: isub
-    integer :: i_condense
 
     double precision :: dt_sub
 
+    double precision :: theta_start
+    double precision :: temp_start
+    double precision :: ql_start
+    double precision :: qt_start
+
+    double precision :: qsat
+    double precision :: ql_iter
+
+    double precision :: efact
+    double precision :: err_at_temp
+    double precision :: err_at_temp_inv_deriv
+    double precision :: divfact
+
+    integer :: iter
+
     !--------------------------------------------------
     ! Temporary aerosol assumptions
-     !--------------------------------------------------
+    !--------------------------------------------------
 
     double precision, parameter :: Nccn_total = 300.d6
     double precision, parameter :: Sc_med     = 1.5d-3
@@ -1014,7 +1025,10 @@ subroutine realistic_supersaturation(this,dt_eff)
       ((mu_cloud+one)**2) / &
       (rho_w*r_activate**3* &
       (mu_cloud+two)*(mu_cloud+three))
+
     logical :: l_warn
+
+    l_warn=.false.
 
     L_v_over_c_p = L_v/c_p
 
@@ -1033,16 +1047,15 @@ subroutine realistic_supersaturation(this,dt_eff)
     nsub = ceiling(dt_eff/dt_micro)
     dt_sub = dt_eff/dble(nsub)
 
-    l_warn=.false.
-
     !$omp parallel default(shared)
     !$omp do private(n,this_height,press,exn,temp,rho_air) &
     !$omp& private(qsat_old,qsat_new,qt) &
     !$omp& private(delta,tend_adiab) &
     !$omp& private(abliq_inv,tau) &
-    !$omp& private(qv_target,dql) &
     !$omp& private(ql,qv,theta,Nl, G_cond_inv) &
-    !$omp& private(isub, i_condense) &
+    !$omp& private(theta_start,temp_start,ql_start,qt_start) &
+    !$omp& private(qsat,ql_iter,efact,err_at_temp,err_at_temp_inv_deriv,divfact) &    
+    !$omp& private(isub, iter) & 
     !$omp& reduction(.or.:l_warn)
     do n = 1,n_parcel_saved
 
@@ -1114,20 +1127,20 @@ subroutine realistic_supersaturation(this,dt_eff)
 
         tend_adiab = (qsat_old - qsat_new)/dt_eff
 
-        qsat_new=qsat_old
+        qsat=qsat_old
         
         do isub = 1,nsub
 
            rho_air = press/(r_d*temp)
 
-           abliq_inv = (L_v*L_v/(r_v*k_a*temp*temp)*rho_air + one/(diffus*qsat_new) )
+           abliq_inv = (L_v*L_v/(r_v*k_a*temp*temp)*rho_air + one/(diffus*qsat) )
 
            G_cond_inv = (rho_w*abliq_inv)
 
            call activate_ccn( &
                 delta, &
                 ql, &
-                qsat_new, &
+                qsat, &
                 rho_air, &
                 dt_sub, &
                 G_cond_inv, &
@@ -1137,7 +1150,7 @@ subroutine realistic_supersaturation(this,dt_eff)
                 ql, &
                 Nl, &
                 rho_air, &
-                qsat_new, &
+                qsat, &
                 abliq_inv, &
                 tau)
 
@@ -1150,50 +1163,43 @@ subroutine realistic_supersaturation(this,dt_eff)
            this_height = this%position(this%n_pos,n)+isub*dt_sub*this%delta_pos(this%n_pos,n)
            call eval_two_splines(press_spline, exn_spline, this_height, press, exn)
 
-           do i_condense= 1,10
-             temp = theta*exn
+           temp = theta*exn
 
-             qsat_new = qsa1/( &
-                0.01d0*press*eval_spline(esat_spline,temp) &
-                - qsa4 )
-              
-             qv_target = qsat_new + delta
-
-             dql = qv - qv_target
-
-             dql = min(dql,qv)
-             dql = max(dql,-ql)
-
-             ql = ql + dql
-
-             theta = theta + (L_v_over_c_p/exn)*dql
-
-             qv = qt - ql
-           
-             ! Remove cloud if effectively evaporated
-             !----------------------------------------------
-
-             if(ql <= eps_cloud) then
- 
-               ql = 0.d0
-
-               qv = qt
-
-               Nl = 0.d0
-
-             endif
-
-             if(abs(dql) < 1.d-5) exit
-
-             if(i_condense==10) then
-                 l_warn=.true.
-             endif
-
-           enddo 
-
-           ! Correct delta with limiters (for further integration)            
-           delta = delta + (qv - qv_target) 
-
+           ! "saturation adjustment" with prognostic delta
+           theta_start=theta
+           temp_start=temp
+           ql_start=ql
+           qt_start=ql_start+qv
+           do iter=1,3
+               efact=0.01d0*press*eval_spline(esat_spline, temp)
+               qsat=qsa1/(efact - qsa4)
+               ql_iter=max(qt_start-delta-qsat,0.0d0)
+               err_at_temp=temp-(temp_start-L_v_over_c_p*(ql_start-ql_iter))
+               if(ql_iter>0.0d0) then
+                  !calculate 1/(d err/ dt) to save a division latent on
+                  divfact=((efact - qsa4)*(efact - qsa4)*(temp - qsa3)*(temp - qsa3))
+                  err_at_temp_inv_deriv=divfact/(divfact+L_v_over_c_p*(qsa1*qsa2*efact*(qsa3-tk0c)))
+               else
+                  err_at_temp_inv_deriv=1.0d0
+               endif
+               temp=temp-err_at_temp*err_at_temp_inv_deriv
+           enddo
+           ! check convergence
+           if(abs(err_at_temp) > 0.01) l_warn=.true.
+           qsat=qsa1/(0.01d0*press*eval_spline(esat_spline, temp)  - qsa4)
+           ql_iter=max(qt_start-delta-qsat,0.0d0)
+           if(ql_iter <= eps_cloud) then
+             Nl = 0.d0
+             ql_iter = 0.0
+           endif
+           theta=theta_start-(L_v_over_c_p/exn)*(ql_start-ql_iter)
+           qv=qt_start-ql_iter
+           ql=ql_iter
+           ! check consistency
+           if(abs(theta*exn-temp)>0.001) l_warn=.true.
+           temp = theta*exn
+           qsat=qsa1/(0.01d0*press*eval_spline(esat_spline, temp)  - qsa4)
+           delta = qv - qsat
         enddo
 
         !==============================================
@@ -1210,12 +1216,10 @@ subroutine realistic_supersaturation(this,dt_eff)
     !$omp end do
     !$omp end parallel
 
+    if(l_warn) write(*,*) "thermodyanmic consistency or temperature convergence issue"
+
     call stop_timer(saturation_adjustment_timer)
     
-    if(l_warn) then
-       write(*,*) "thermodynamics not converging" 
-    endif
-
 contains
 
     !==================================================
