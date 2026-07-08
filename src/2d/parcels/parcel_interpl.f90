@@ -343,6 +343,7 @@ module parcel_interpl
             endif
             if(parcels%has_droplets) then
                 Nlg = zero
+                supersaturation = zero
             endif
             thetag = zero
             tbuoyg = zero
@@ -388,6 +389,8 @@ module parcel_interpl
                     if(parcels%has_droplets) then
                         Nlg(js:js+1, is:is+1) = Nlg(js:js+1, is:is+1) &
                                              + weight * parcels%Nl(n)
+                        supersaturation(js:js+1, is:is+1) = supersaturation(js:js+1, is:is+1) &
+                                             + weight * parcels%supersat(n)
                     endif
                     tbuoyg(js:js+1, is:is+1) = tbuoyg(js:js+1, is:is+1) &
                                          + weight * btot
@@ -445,6 +448,10 @@ module parcel_interpl
                 Nlg(:, nx-1) = Nlg(:, nx-1) + Nlg(:, -1)
                 Nlg(:, -1)   = Nlg(:, nx-1)
                 Nlg(:, nx)   = Nlg(:, 0)
+                supersaturation(:, 0)    = supersaturation(:, 0) + supersaturation(:, nx)
+                supersaturation(:, nx-1) = supersaturation(:, nx-1) + supersaturation(:, -1)
+                supersaturation(:, -1)   = supersaturation(:, nx-1)
+                supersaturation(:, nx)   = supersaturation(:, 0)
             endif
 
             ! apply free slip boundary condition
@@ -479,6 +486,10 @@ module parcel_interpl
                 Nlg(nz, :) = two * Nlg(nz, :)
                 Nlg(1,    :) = Nlg(1,    :) + Nlg(-1,   :)
                 Nlg(nz-1, :) = Nlg(nz-1, :) + Nlg(nz+1, :)
+                supersaturation(0,  :) = two * supersaturation(0,  :)
+                supersaturation(nz, :) = two * supersaturation(nz, :)
+                supersaturation(1,    :) = supersaturation(1,    :) + supersaturation(-1,   :)
+                supersaturation(nz-1, :) = supersaturation(nz-1, :) + supersaturation(nz+1, :)
             endif
 
             tbuoyg(0,  :) = two * tbuoyg(0,  :)
@@ -509,6 +520,7 @@ module parcel_interpl
 
             if(parcels%has_droplets) then
                 Nlg(0:nz, :) = Nlg(0:nz, :) / volg(0:nz, :)
+                supersaturation(0:nz, :) = supersaturation(0:nz, :) / volg(0:nz, :)
             endif
             tbuoyg(0:nz, :) = tbuoyg(0:nz, :) / volg(0:nz, :)
             thetag(0:nz, :) = thetag(0:nz, :) / volg(0:nz, :)

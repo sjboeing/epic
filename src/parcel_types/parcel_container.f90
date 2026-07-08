@@ -141,10 +141,11 @@ module parcel_container
     end interface
     
     interface
-        subroutine dynamic_parcel_supersaturation(this,dt_eff)
+        subroutine dynamic_parcel_supersaturation(this,timetend, cbdt)
             import dynamic_parcel_type
             class(dynamic_parcel_type), intent(inout) :: this
-            double precision, intent(in) :: dt_eff
+            double precision, intent(in) :: timetend
+            double precision, intent(in) :: cbdt
         end subroutine dynamic_parcel_supersaturation
     end interface
 

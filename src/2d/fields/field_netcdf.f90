@@ -23,7 +23,7 @@ module field_netcdf
     integer             :: x_vel_id, z_vel_id, vor_id, &
                            tbuo_id, n_writes
     integer             :: dbuo_id, hum_id
-    integer             :: theta_id, qv_id, ql_id, Nl_id
+    integer             :: theta_id, qv_id, ql_id, Nl_id, supersaturation_id
     integer             :: prec_vol_id, prec_tbuo_id, qr_id, Nr_id, prec_npar_id
 #ifdef ENABLE_DIAGNOSE
     integer             :: vol_id, npar_id
@@ -39,7 +39,7 @@ module field_netcdf
                n_writes, restart_time
 
     private :: dbuo_id, hum_id
-    private :: theta_id, qv_id, ql_id, Nl_id
+    private :: theta_id, qv_id, ql_id, Nl_id, supersaturation_id
     private :: prec_vol_id, prec_tbuo_id, qr_id, Nr_id, prec_npar_id
 #ifdef ENABLE_DIAGNOSE
     private :: vol_id, npar_id
@@ -209,6 +209,15 @@ module field_netcdf
                                            dtype=NF90_DOUBLE,                    &
                                            dimids=dimids,                        &
                                            varid=Nl_id)
+                   
+                   call define_netcdf_dataset(ncid=ncid,                         &
+                                           name='supersaturation',               &
+                                           long_name='supersaturation',          &
+                                           std_name='',                          &
+                                           unit='-',                             &
+                                           dtype=NF90_DOUBLE,                    &
+                                           dimids=dimids,                        &
+                                           varid=supersaturation_id)
                 endif
             endif
 
@@ -333,6 +342,7 @@ module field_netcdf
                 endif
                 if(parcels%has_droplets) then
                     call get_var_id(ncid, 'Nl', Nl_id)
+                    call get_var_id(ncid, 'supersaturation', supersaturation_id)
                 endif
             endif
 #ifdef ENABLE_DIAGNOSE
@@ -407,6 +417,8 @@ module field_netcdf
                                                   start, cnt)
                 endif
                 if(parcels%has_droplets) then
+                    call write_netcdf_dataset(ncid, supersaturation_id, supersaturation(0:nz, 0:nx-1), &
+                                                  start, cnt)
                     call write_netcdf_dataset(ncid, nl_id, Nlg(0:nz, 0:nx-1), &
                                                   start, cnt)
                 endif

@@ -38,6 +38,7 @@ module fields
 #ifndef NDEBUG
         sym_volg,  &   ! symmetry volume (debug mode only)
 #endif
+        supersaturation, &        ! supersaturation gridded field
         volg, &        ! volume scalar field
         strain_mag 
 
@@ -92,10 +93,13 @@ module fields
                 qlg = zero
                 if(parcels%has_droplets) then
                     allocate(Nlg(-1:nz+1, -1:nx))
+                    allocate(supersaturation(-1:nz+1, -1:nx))
                 else
                     allocate(Nlg(1, 1))
+                    allocate(supersaturation(1,1))
                 endif
                 Nlg = zero
+                supersaturation = zero
             endif
 
             allocate(nparg(-1:nz, -1:nx))
