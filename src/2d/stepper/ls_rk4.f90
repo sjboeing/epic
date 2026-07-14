@@ -218,7 +218,9 @@ module ls_rk4
             ! DO THE MICROPHYSICS LOOP HERE, AFTER WE KNOW DELTA_POS 
             time_tend=time_tend+1.0d0
             call stop_timer(rk4_timer)
+            parcels%local_num = n_parcels
             call parcels%supersaturation(time_tend, cb*dt) !effective microphysics timestep
+            n_parcels = parcels%local_num
             call start_timer(rk4_timer)
 
             !$omp parallel do default(shared) private(n)

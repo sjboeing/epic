@@ -1261,9 +1261,6 @@ contains
         double precision :: Nl_max
         double precision :: ql_avail
     
-        double precision :: alpha
-        double precision :: tau_act
-    
         if(delta_act > zero) then
            S_act = max(delta_act/qsat,1.d-8)
            x = (S_act/Sc_med)**(1.0/3.0)
@@ -1309,7 +1306,6 @@ contains
     
         double precision :: lambda_c
         double precision :: r_mean
-        double precision :: Nl_eff
         double precision :: arg
     
         if (Nl <= zero .or. ql <= zero) then
